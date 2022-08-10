@@ -1,0 +1,65 @@
+9 pin LoRa - SPI
+
+2 pin sim - UART
+2 PIN GPS - UART
+
+2pin gygo - I2C
+
+3/4 sd card - SPI
+tft display/touch
+
+----------------------------------------
+ttn on/off (sent data every minute if moving)
+wifi dump on/off
+
+routes taken
+max speed
+avg speed
+fastest accerelation
+etc
+čím vyšš G, tím vyšší GPS pull rate
+
+drag race mode, normal mode
+gps fast enough for drag????
+místo rf, lora???
+lora antena
+----------------------------------------------
+lora - got it working - prepare for using
+gps - got it working - prepare for using, write code to get data and write to file
+sd - got it working
+gyro - got it working
+gsm - tbd
+
+kod verze github
+
+https://developers.google.com/maps/documentation/javascript/examples/rectangle-event
+https://developers.google.com/maps/documentation/javascript/examples/polyline-complex
+https://developers.google.com/maps/documentation/javascript/examples/polyline-simple
+https://developers.google.com/maps/documentation/javascript/adding-a-google-map
+
+normal mode:
+-every 10s sample gyro data and declare if we are moving or not
+-if we started moving, create new ride file+id, start sending lora every so often with that id(start/wake gps)
+-if we stopped-no moving detection for few minutes (gyro or gps(distancefrom func)), end file and stop lora, sleep gps
+drag mode: (best with display,or phone on holder)
+-end ride file:
+-listen for ready on web/display
+-when gyro movement detected (not false positive), start logging all goals
+-after deacc- save all to drag file, send special lora packets with basic info about drag
+-repeat until switched to normal
+armed mode:
+-send SMS every XX minutes
+-send lora constantly every XX minutes
+-can power on alarm
+GSM:
+-get current gps pos
+WIFI:
+-can dump all on wifi internet connect
+-control panel to change settings
+-see drags, taken routes, info about them (how long, fastest speed,map,id,when taken, etc.)
+-(same on nodejs server)
+
+https://randomnerdtutorials.com/esp-now-esp8266-nodemcu-arduino-ide/
+https://randomnerdtutorials.com/esp32-esp-now-wi-fi-web-server/
+https://randomnerdtutorials.com/esp-now-two-way-communication-esp32/
+https://eu1.cloud.thethings.network/console/applications/carstatstracker/data
