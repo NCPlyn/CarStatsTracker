@@ -16,26 +16,15 @@ routes taken
 max speed
 avg speed
 fastest accerelation
-etc
-čím vyšš G, tím vyšší GPS pull rate
 
-drag race mode, normal mode
-gps fast enough for drag????
-místo rf, lora???
-lora antena
 ----------------------------------------------
 lora - got it working - prepare for using
-gps - got it working - prepare for using, write code to get data and write to file
+gps - got it working - yep (nutno povolit protokoly když se vybije baterka)
 sd - got it working
-gyro - got it working
+gyro - got it working - yep
 gsm - tbd
 
-kod verze github
-
-https://developers.google.com/maps/documentation/javascript/examples/rectangle-event
-https://developers.google.com/maps/documentation/javascript/examples/polyline-complex
-https://developers.google.com/maps/documentation/javascript/examples/polyline-simple
-https://developers.google.com/maps/documentation/javascript/adding-a-google-map
+leaflet mapa
 
 normal mode:
 -every 10s sample gyro data and declare if we are moving or not
@@ -63,3 +52,15 @@ https://randomnerdtutorials.com/esp-now-esp8266-nodemcu-arduino-ide/
 https://randomnerdtutorials.com/esp32-esp-now-wi-fi-web-server/
 https://randomnerdtutorials.com/esp-now-two-way-communication-esp32/
 https://eu1.cloud.thethings.network/console/applications/carstatstracker/data
+
+sent when on the way frequently, when stopped once a time
+rideId,moving(y/n),lat,lng,kmph,epochTime
+
+esp:
+-web
+-config
+-lora
+web:
+-save routes
+-properly show(load)
+-able to upload

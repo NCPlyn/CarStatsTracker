@@ -1,0 +1,68 @@
+<html>
+  <head>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.8.0/dist/leaflet.css" integrity="sha512-hoalWLoI8r4UszCkZ5kL8vayOGVae1oxXe/2A4AO6J9+580uKHDO3JdHb7NzwwzK5xr/Fs0W40kiNHxM9vyTtQ==" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.8.0/dist/leaflet.js" integrity="sha512-BB3hKbKWOc9Ez/TAwyWxNXeoV9c1v6FIeYiBieIWkpLjauysF18NzgR1MBNBXf8/KABdlkX68nAhlwcDFLGPCQ==" crossorigin=""></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CarStatsTracker</title>
+  </head>
+  <style>
+    #map {
+      height: 800px;
+      width: 800;
+    }
+  </style>
+
+  <body>
+    <div id="map"></div>
+  </body>
+  
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    socket.on('loraDecoded', (str) => {
+      placeData(str);
+    });
+
+    var map = L.map("map").setView([49.939, 17.905], 13);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "© OpenStreetMap"
+    }).addTo(map);
+
+    //recieve db of all rides
+    //recieve, if live (filter maybe) then call placeDataa, if load, nuke array and markers, placeData
+
+    //live mode/current ride mode (load so far + add on recieve)
+    //review mode (disable live and nuke all, on select load data)
+
+    //moving- y/n depends on current route tracked by nodejs
+
+    var markerArray = [];
+    var maNum = 0;
+
+    function placeData(data) {
+      //moving;lat;lng;speed;heading;epoch
+      const dataArray = data.split(";");
+      var d = new Date(0);
+      d.setUTCSeconds(dataArray[4]);
+      if (dataArray[0] == "n") {
+        L.marker([dataArray[1], dataArray[2]]).addTo(map).bindPopup("<b>Speed:</b> " + dataArray[3] + "km/h<br><b>Time:</b> " + d.toUTCString());
+      } else if (dataArray[0] == "y") {
+        markerArray[maNum] = L.marker([dataArray[1], dataArray[2]]).addTo(map).bindPopup("<b>Speed:</b> " + dataArray[3] + "km/h<br><b>Time:</b> " + d.toUTCString());
+        maNum++;
+        if (maNum > 1) {
+          L.polygon([
+            markerArray[maNum - 2].getLatLng(),
+            markerArray[maNum - 1].getLatLng()
+          ]).addTo(map);
+        }
+      }
+    }
+    placeData("y;49.941;17.905;56;162;1662965885");
+    placeData("y;49.942;17.905;56;162;1662965885");
+    placeData("y;49.943;17.906;56;162;1662965885");
+
+    //https://leafletjs.com/examples.html
+  </script>
+</html>
