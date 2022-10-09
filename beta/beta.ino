@@ -14,7 +14,7 @@
 #include <LITTLEFS.h>
 #include "loraCreds.h"
 
-#define LORAWAN_APP_DATA_BUFF_SIZE 64  /**< Size of the data to be transmitted. */
+#define LORAWAN_APP_DATA_BUFF_SIZE 50  /**< Size of the data to be transmitted. */
 #define JOINREQ_NBTRIALS 3			   /**< Number of trials for the join request. */
 hw_config hwConfig;
 // Foward declaration
@@ -65,9 +65,9 @@ float targetDistancesTime[30];
 
 unsigned long gpsStatMillis = millis();
 float deadzoneX=0,deadzoneY=0,deadzoneZ=0;
-float detectVal=0.2;
+float detectVal=0.4;
 bool doDrag = false, gpsReady = false;
-int opMode = 1; //0 - normal, 1 - drag
+int opMode = 0; //0 - normal, 1 - drag
 int currentRideID = 0;
 
 bool loadSPIFFS() {
@@ -114,6 +114,8 @@ bool saveSPIFFS() {
   return true;
 }
 
+bool gpspause = false;
+
 void setup() {
   for(int x = 0;x<numOfSpeeds;x++) {
     targetSpeedsTime[x] = 0;
@@ -128,9 +130,11 @@ void setup() {
 
   myIMU.begin();
 
-  Serial2.begin(9600, SERIAL_8N1, 16, 17); //RX 16, TX 17
+  Serial2.begin(115200, SERIAL_8N1, 16, 17); //RX 16, TX 17
 
   pinMode(0, INPUT);
+  pinMode(13, OUTPUT);
+  digitalWrite(13, LOW);
 
   WiFi.softAP(ssid, password);
   Serial.println(WiFi.softAPIP());
@@ -155,6 +159,7 @@ void setup() {
   loadSPIFFS();
 
   copyArrays();
+  gpspause = true;
   LoraSetup();
 }
 
@@ -165,7 +170,7 @@ double lastLat = 48.85826 ,lastLng = 2.294516, startLat = 0.0, startLng = 0.0;
 
 void loop()
 {
-  while (Serial2.available() > 0) {
+  while (Serial2.available() > 0 && !gpspause) {
     if (gps.encode(Serial2.read())) {
       if(millis()>(gpsStatMillis+5000)) {
         if(gps.location.age() > 2000) {// || gpsFix.value() == 0 || gps.satellites.value() < 3
@@ -179,7 +184,10 @@ void loop()
   }
 
   if(gpsReady==true && routeActive==false && millis()>lastNotMovedLora+60000 /*&& loraReady*/){ //předělat na delší čas,
+    gpspause = true;
     sendPos("n");
+    gpspause = false;
+    Serial.println("sending lora");
     lastNotMovedLora = millis();
   }
 
@@ -187,7 +195,6 @@ void loop()
     if(digitalRead(0) == LOW) {
       calibrateAcc();
     }
-    //vymenit za gyro?
     if(detectMove && millis()>(detectMoveMillis+5000) && ((myIMU.readFloatAccelX()-deadzoneX)>detectVal || (myIMU.readFloatAccelY()-deadzoneY)>detectVal || (myIMU.readFloatAccelZ()-deadzoneZ)>detectVal)) {
       Serial.println("Movement detected on accel");
       moveDetected = true;
@@ -230,7 +237,6 @@ void loop()
       lastLng = gps.location.lng();
       //send rideId,moving(y/n),lat,lng,kmph,epochTime
       sendPos("y");
-
       lastLora = millis();
     }
   } else if(opMode == 1) {
@@ -268,7 +274,7 @@ uint32_t getUnix(uint32_t year, uint32_t month, uint32_t day, uint32_t hour, uin
     }
 
 bool sendPos(String moving) { //rideid;moving;lat;lng;kmph;epoch - opravdu celý float?
-  String out = String(currentRideID)+","+moving+String(gps.location.lat())+","+String(gps.location.lng())+","+String(gps.speed.kmph())+","+String(getUnix(gps.date.year(),gps.date.month(),gps.date.day(),gps.time.hour(),gps.time.minute(),gps.time.second()));
+  String out = String(currentRideID)+";"+moving+";"+String(gps.location.lat(),5)+";"+String(gps.location.lng(),5)+";"+String(gps.speed.kmph())+";"+String(getUnix(gps.date.year(),gps.date.month(),gps.date.day(),gps.time.hour(),gps.time.minute(),gps.time.second()));
   Serial.println(out);
   //write to file?
   send_lora_frame(out);
@@ -344,8 +350,6 @@ int dragTimer() { //this needs to run on another core
     targetDistancesTime[x] = 0;
   }
 }
-//this commit not tested
-//after lora will be added, it will be tested
 
 void LoraSetup() {
   // Define the HW configuration between MCU and SX126x
@@ -410,6 +414,8 @@ static void lorawan_join_failed_handler(void) {
 	Serial.println("OVER_THE_AIR_ACTIVATION failed!");
 	Serial.println("Check your EUI's and Keys's!");
 	Serial.println("Check if a Gateway is in range!");
+  gpspause = false;
+  digitalWrite(13, LOW);
 }
 
 //LoRa function for handling HasJoined event.
@@ -423,6 +429,8 @@ static void lorawan_has_joined_handler(void) {
   lmh_class_request(CLASS_A);
 
   //lora ready (what about not ready? disconnected..)
+  gpspause = false;
+  digitalWrite(13, HIGH);
 }
 
 //Function for handling LoRaWan received data from Gateway
@@ -432,8 +440,7 @@ static void lorawan_rx_handler(lmh_app_data_t *app_data) { //app_data - Pointer 
 
 	switch (app_data->port)
 	{
-	case 3:
-		// Port 3 switches the class
+	case 3:// Port 3 switches the class
 		if (app_data->buffsize == 1)
 		{
 			switch (app_data->buffer[0])
@@ -484,12 +491,9 @@ static void send_lora_frame(String toSend) {
 
 	uint32_t i = 0;
 	m_lora_app_data.port = LORAWAN_APP_PORT;
-  toSend.toCharArray(reinterpret_cast<char *>(m_lora_app_data.buffer), toSend.length());
-  Serial.println(m_lora_app_data.buffer);
+  toSend.toCharArray(reinterpret_cast<char *>(m_lora_app_data.buffer), toSend.length()+1);
 	m_lora_app_data.buffsize = toSend.length();
 
 	lmh_error_status error = lmh_send(&m_lora_app_data, LMH_UNCONFIRMED_MSG);
 	Serial.printf("lmh_send result %d\n", error);
 }
-
-//stále nevyzkoušené, ale zkompiluje se a mělo by to fungovat

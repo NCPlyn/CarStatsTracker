@@ -10,5 +10,11 @@
     "startEpoch": "1664322350",
     "avg": 80,
     "max": 90
+  },
+  {
+    "id": "0",
+    "startEpoch": 0,
+    "max": 0,
+    "avg": 0
   }
 ]

@@ -23,4 +23,5 @@ Cílem projektu je vyrobit zařízení které:
 - ESPAsyncWebServer pro lokání web: https://github.com/me-no-dev/ESPAsyncWebServer
 - a další menší knihovny pro ESP
 - Někdy byly použity návody z https://randomnerdtutorials.com/
-- Hlavní server funguje na základě https://nodejs.org/ a základních podpůrných express a socket.io knihoven na Debian VPS
+- Hlavní server (Debian VPS) funguje na základě https://nodejs.org/
+- spolu s základními express a socket.io knihoven, pro mapy je využit https://leafletjs.com/

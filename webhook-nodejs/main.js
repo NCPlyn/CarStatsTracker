@@ -17,10 +17,10 @@ app.post('/uplink', function (req, res) {
 	var buf = Buffer.from(jsonParsed.uplink_message.frm_payload, 'base64');
 	var str = buf.toString('utf-8');
 	console.log(str);
-	const dataArray = data.split(";");
+	const dataArray = str.split(";");
 	var out = {rideId:dataArray[0],moving:dataArray[1],lat:dataArray[2],lng:dataArray[3],speed:dataArray[4],epoch:dataArray[5]};
-	saveUplink(out);
   io.emit("loraDecoded", out.moving, out.lat, out.lng, out.speed, out.epoch);
+	saveUplink(out);
   res.status(200).end()
 });
 
@@ -44,34 +44,25 @@ function search(array, insert, cb) {
 
 function saveUplink(data) {
 	var currentFileContent;
-	if (fs.existsSync("routes/"+data.rideId+".json")) {
-		fs.readFile("routes/"+data.rideId+".json", (err, buff) => {
-		  if (err) {
-		    console.error(err);
-				return;
-		  }
-		  currentFileContent = buff.toString();
-		});
-		let newjson = {"moving":data.moving,"lat":data.lat,"lng":data.lng,"speed":data.speed,"epoch":data.epoch};
-		let insert = JSON.stringify(newjson, null, 2);
+	if (fs.existsSync("routes/"+String(data.rideId)+".json")) { //also check routes.json???
+		currentFileContent = JSON.parse(fs.readFileSync("routes/"+String(data.rideId)+".json", 'utf8'));
+		let insert = {"moving":data.moving,"lat":data.lat,"lng":data.lng,"speed":data.speed,"epoch":data.epoch};
 		var index = search(currentFileContent, insert, function (a) { return a.epoch; });
 		currentFileContent.splice(index + 1, 0, insert);
-  } else {
-		//create entry in db
+  } else { //create entry in db
 		let dbData = JSON.parse(fs.readFileSync("routes.json", 'utf8'));
-    data.push({"routeId": data.rideId,"startEpoch": 0,"max": 0,"avg": 0}); //dodělat startEpoch,max,avg - calc function při každém přidání
-    jsonStr = JSON.stringify(data, null, 2);
+    dbData.push({"id": data.rideId,"startEpoch": 0,"max": 0,"avg": 0});
+		//!!!dodělat startEpoch,max,avg - calc function při každém přidání
+    jsonStr = JSON.stringify(dbData, null, 2);
     fs.writeFile("routes.json", jsonStr, err => {
       if (err) {
         console.log(`Data couldn't be saved! Error: ${err}`);
       }
     });
-
 		let newjson = [];
 	  newjson.push({"moving":data.moving,"lat":data.lat,"lng":data.lng,"speed":data.speed,"epoch":data.epoch});
-	  let currentFileContent = JSON.stringify(newjson, null, 2);
 	}
-	fs.writeFile("routes/"+data.rideId+".json", currentFileContent, err => {
+	fs.writeFile("routes/"+String(data.rideId)+".json", String(JSON.stringify(currentFileContent, null, 2)), err => {
     if (err) {
       console.log(`Data couldn't be saved! Error: ${err}`);
     }
@@ -85,17 +76,23 @@ io.on('connection', (socket) => {
       socket.emit('loadRoutes', obj.id, obj.startEpoch, obj.max, obj.avg);
     });
   });
-  socket.on('getPoints', routeId => { //signal to send post from specific board, load from json
+  socket.on('getPoints', routeId => { //signal to send points from specific ride
     let routePath = "routes/" + routeId + ".json";
     if (fs.existsSync(routePath)) {
       let data = JSON.parse(fs.readFileSync(routePath, 'utf8'));
+			socket.emit('loadPoints', "new",0,0,0,0);
       data.forEach(function(obj) { //rideid;moving;lat;lng;kmph;epoch
         socket.emit('loadPoints', obj.moving,obj.lat,obj.lng,obj.speed,obj.epoch);
       });
     } else {
-      //error: not found
+      socket.emit('error', "No ride file with ID:"+routeId+" found on server!");
     }
   });
+});
+
+process.on('uncaughtException', function(err) {
+  console.log('Caught exception: ' + err);
+	socket.emit('error', 'Caught exception: ' + err);
 });
 
 const PORT = process.env.PORT || 80;

@@ -7,7 +7,6 @@
 
 3/4 sd card - SPI
 tft display/touch
-
 ----------------------------------------
 ttn on/off (sent data every minute if moving)
 wifi dump on/off
@@ -16,16 +15,13 @@ routes taken
 max speed
 avg speed
 fastest accerelation
-
 ----------------------------------------------
-lora - got it working - prepare for using
-gps - got it working - yep (nutno povolit protokoly když se vybije baterka)
-sd - got it working
-gyro - got it working - yep
-gsm - tbd
-
-leaflet mapa
-
+gyro - hotovo
+lora - funguje, ale kontrola připojení a obnovení připojení (asi koupit/vyrobit zesik nebo anténa lepší)
+gps - funguje, ale vyzkoušet zapnout kontrolu pomocí dalších věcí (stačí odkomentovat)
+sd - samoosobě - mohl by se už pomalu zakomponovat
+gsm - vůbec nic
+----------------------------------------------
 normal mode:
 -every 10s sample gyro data and declare if we are moving or not
 -if we started moving, create new ride file+id, start sending lora every so often with that id(start/wake gps)
@@ -48,19 +44,29 @@ WIFI:
 -see drags, taken routes, info about them (how long, fastest speed,map,id,when taken, etc.)
 -(same on nodejs server)
 
-https://randomnerdtutorials.com/esp-now-esp8266-nodemcu-arduino-ide/
-https://randomnerdtutorials.com/esp32-esp-now-wi-fi-web-server/
-https://randomnerdtutorials.com/esp-now-two-way-communication-esp32/
+https://randomnerdtutorials.com/esp32-esp-now-wi-fi-web-server/ (něco jako socketio xd)
 https://eu1.cloud.thethings.network/console/applications/carstatstracker/data
 
-sent when on the way frequently, when stopped once a time
 rideId,moving(y/n),lat,lng,kmph,epochTime
 
+----------------------------------------------
 esp:
--web
--config
--lora
-web:
--save routes
--properly show(load)
--able to upload
+spiffs nefajčí
+vyzkoušet wifinu ve všech případech
+dostat obecné nastavitelné proměnné do configu a stránku (kod z protogena)
+multithreading (vyřešení problému konfliktu lory a serialu gps) - lora nebo gps na jiném jádru (zatím gps pause)
+sent/save when on the way frequently(sd even more frequently), when stopped once a time
+config pro obecné variables
+(web přímo na esp)
+sd přidat
+
+server:
+kalkulace věcí
+stránka obecně
+
+
+//Check whether the Device is joined to the network
+//retval returns LORAMACHELPER_SET if joined
+lmh_join_status lmh_join_status_get(void);
+
+bool, sledování zda je připojené lorawan

@@ -2,6 +2,8 @@
   <head>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.8.0/dist/leaflet.css" integrity="sha512-hoalWLoI8r4UszCkZ5kL8vayOGVae1oxXe/2A4AO6J9+580uKHDO3JdHb7NzwwzK5xr/Fs0W40kiNHxM9vyTtQ==" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.8.0/dist/leaflet.js" integrity="sha512-BB3hKbKWOc9Ez/TAwyWxNXeoV9c1v6FIeYiBieIWkpLjauysF18NzgR1MBNBXf8/KABdlkX68nAhlwcDFLGPCQ==" crossorigin=""></script>
+    <link rel="stylesheet" href="//unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.css" type="text/css">
+    <script src="//unpkg.com/leaflet-gesture-handling"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CarStatsTracker</title>
   </head>
@@ -14,6 +16,7 @@
 
   <body>
     <div id="map"></div>
+    <div id="test"></div>
   </body>
 
   <script src="/socket.io/socket.io.js"></script>
@@ -21,33 +24,45 @@
   <script>
     const socket = io(); //potřeba dodělat stránku ať apoň funguje
 
+    socket.on('error', (msg) => {
+      alert(msg);
+    });
+
     socket.on('loraDecoded', (moving,lat,lng,speed,epoch) => {
       placeData(moving,lat,lng,speed,epoch);
     });
 
     socket.on('loadPoints', (moving,lat,lng,speed,epoch) => {
-      //if bool to nuke all + array
+      if(moving == "new") {
+        maNum = 0;
+        map.eachLayer((layer) => {
+          if(!layer.hasOwnProperty('_url'))
+            layer.remove();
+        });
+      }
       placeData(moving,lat,lng,speed,epoch);
     });
 
-    socket.on('loadRoutes', (id,startEpoch,max,avg) => {
-      document.body.innerHTML += "<a id=" + id + ">" + id + "</a>Started on " + startEpoch;
+    socket.on('loadRoutes', (id,startEpoch,max,avg) => { //lepší
+      document.getElementById("test").innerHTML += "<a id=" + id + ">" + id + "</a> Started on " + startEpoch + "<br>";
     });
 
     socket.emit('getRoutes');
 
-    $('a').on('click', function() {
+    $('#test').on('click','a', function() {
       socket.emit('getPoints', $(this).attr('id'));
     });
 
-    var map = L.map("map").setView([49.939, 17.905], 13);
+    var map = L.map('map', {
+      center: [49.939, 17.905],
+      zoom: 15,
+      gestureHandling: true
+    })
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: "© OpenStreetMap"
     }).addTo(map);
 
-    //recieve db of all rides
-    //recieve, if load, nuke array and markers, placeData
 
     var markerArray = [];
     var maNum = 0;
@@ -65,13 +80,6 @@
         ]).addTo(map);
       }
     }
-
-    /*placeData("y","49.941","17.905","162","1662965885");
-    placeData("y","49.942","17.905","162","1662965885");
-    placeData("y","49.943","17.906","162","1662965885");
-    placeData("n","49.943","17.907","162","1662965885");
-    placeData("n","49.943","17.908","162","1662965885");
-    placeData("y","49.944","17.906","162","1662965885");*/
 
     //https://leafletjs.com/examples.html
   </script>
