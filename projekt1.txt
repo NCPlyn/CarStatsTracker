@@ -1,25 +1,14 @@
 9 pin LoRa - SPI
-
+2pin gyro - I2C
 2 pin sim - UART
 2 PIN GPS - UART
-
-2pin gygo - I2C
-
-3/4 sd card - SPI
+4 sd card - SPI
 tft display/touch
-----------------------------------------
-ttn on/off (sent data every minute if moving)
-wifi dump on/off
-
-routes taken
-max speed
-avg speed
-fastest accerelation
 ----------------------------------------------
 gyro - hotovo
 lora - funguje, ale kontrola připojení a obnovení připojení (asi koupit/vyrobit zesik nebo anténa lepší)
-gps - funguje, ale vyzkoušet zapnout kontrolu pomocí dalších věcí (stačí odkomentovat)
-sd - samoosobě - mohl by se už pomalu zakomponovat
+gps - hotovo
+sd - hotovo
 gsm - vůbec nic
 ----------------------------------------------
 normal mode:
@@ -51,19 +40,18 @@ rideId,moving(y/n),lat,lng,kmph,epochTime
 
 ----------------------------------------------
 esp:
-spiffs nefajčí
-vyzkoušet wifinu ve všech případech
-dostat obecné nastavitelné proměnné do configu a stránku (kod z protogena)
-multithreading (vyřešení problému konfliktu lory a serialu gps) - lora nebo gps na jiném jádru (zatím gps pause)
+dostat obecné nastavitelné proměnné do configu a stránku (kod z protogena) - config pro obecné variables, zapínat a vypínat věci (restart)
 sent/save when on the way frequently(sd even more frequently), when stopped once a time
-config pro obecné variables
-(web přímo na esp)
-sd přidat
+web přímo na esp
+lora send drags (+sd karta)
+lora kontrola připojení
+wifi problems still?? try connecting now if you can and send data
 
 server:
-kalkulace věcí
-stránka obecně
+if uplink drag (prefix on rideId), save drag
+stránka (jiná barva row pokud drag)
 
+začít dělat pcb pomalu
 
 //Check whether the Device is joined to the network
 //retval returns LORAMACHELPER_SET if joined

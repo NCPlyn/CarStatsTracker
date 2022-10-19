@@ -3,24 +3,38 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.8.0/dist/leaflet.css" integrity="sha512-hoalWLoI8r4UszCkZ5kL8vayOGVae1oxXe/2A4AO6J9+580uKHDO3JdHb7NzwwzK5xr/Fs0W40kiNHxM9vyTtQ==" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.8.0/dist/leaflet.js" integrity="sha512-BB3hKbKWOc9Ez/TAwyWxNXeoV9c1v6FIeYiBieIWkpLjauysF18NzgR1MBNBXf8/KABdlkX68nAhlwcDFLGPCQ==" crossorigin=""></script>
     <link rel="stylesheet" href="//unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.css" type="text/css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
     <script src="//unpkg.com/leaflet-gesture-handling"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CarStatsTracker</title>
   </head>
   <style>
     #map {
-      height: 800px;
-      width: 800;
+      height: 80%;
     }
   </style>
 
-  <body>
+  <body style="background-color:#212529">
     <div id="map"></div>
-    <div id="test"></div>
+    <table class="table table-bordered table-dark table-striped">
+      <thead>
+        <tr>
+          <th scope="col">#</th>
+          <th scope="col">Start</th>
+          <th scope="col">Max kmph</th>
+          <th scope="col">Avg kmph</th>
+          <th scope="col">Distance</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody id="tablebody">
+      </tbody>
+    </table>
   </body>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
   <script>
     const socket = io(); //potřeba dodělat stránku ať apoň funguje
 
@@ -43,14 +57,22 @@
       placeData(moving,lat,lng,speed,epoch);
     });
 
-    socket.on('loadRoutes', (id,startEpoch,max,avg) => { //lepší
-      document.getElementById("test").innerHTML += "<a id=" + id + ">" + id + "</a> Started on " + startEpoch + "<br>";
+    socket.on('loadRoutes', (id,startEpoch,max,avg,total) => {
+      var d = new Date(0);
+      d.setUTCSeconds(startEpoch);
+      document.getElementById("tablebody").innerHTML += "<th scope=\"row\">" + id + "</th><td>" + d.toUTCString() + "</td><td>" + max + "</td><td>" + avg + "</td><td>" + total + "</td><td><button id=\""+id+"\" type=\"button\" class=\"btn btn-primary btn-sm rideLoad\">Load</button> <button id=\""+id+"\" type=\"button\" class=\"btn btn-primary btn-sm rideRefresh\">Refresh</button></td></tr>";
     });
 
     socket.emit('getRoutes');
 
-    $('#test').on('click','a', function() {
+    $('#tablebody').on('click','.rideLoad', function() {
       socket.emit('getPoints', $(this).attr('id'));
+    });
+
+    $('#tablebody').on('click','.rideRefresh', function() {
+      socket.emit('reCalc', $(this).attr('id'));
+      $('#tablebody').empty();
+      setTimeout(function(){socket.emit('getRoutes');}, 5000);
     });
 
     var map = L.map('map', {
@@ -80,7 +102,5 @@
         ]).addTo(map);
       }
     }
-
-    //https://leafletjs.com/examples.html
   </script>
 </html>
