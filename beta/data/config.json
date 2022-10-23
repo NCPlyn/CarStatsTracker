@@ -1,4 +1,5 @@
 {
 	"currentRideID":0,
-	"enaLora":true
+	"enaLora":true,
+	"detectVal":0.4
 }

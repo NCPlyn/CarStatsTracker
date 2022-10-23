@@ -1,0 +1,64 @@
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=">
+    <meta charset="UTF-8">
+    <title>CarStatsTracker</title>
+  </head>
+  <style>
+    a,a:link,a:visited {
+      color:white;
+    }
+    body {
+      font-family:Verdana;
+      text-align:center;
+      background-color:#333743;
+      color:white;
+    }
+    input[type=number],input[type=select] {
+      margin-top:7px;
+    }
+  </style>
+  <body>
+    <a href='/'>ROUTE</a> / <a href='/drag.html'>DRAG</a> / <a href='/config.html'>SETTINGS</a><br><hr>
+    <a href='/opmode?val=1'>DRAG</a><br>
+    <a href='/opmode?val=0'>NORMAL</a><br>
+    <a href='/calibrate'>CALIBRATE</a><br>
+    <form>
+      <input type="checkbox" id="enaLora">
+      <label for="enaLora"> enaLora</label><br>
+      <input type="number" name="currentRideID" min="0" max="1000">
+      <label for="currentRideID"> currentRideID</label><br>
+      <input type="number" name="detectVal" min="0" max="10">
+      <label for="detectVal"> detectVal (default:0.4)</label><br>
+      <br>
+      <button type="button" onclick="saveConfig()">Save config</button>
+    </form>
+  </body>
+</html>
+
+<script>
+	function loadConfig() {
+		xmlhttp=new XMLHttpRequest();
+		xmlhttp.onreadystatechange=function()
+		{
+			if (xmlhttp.readyState==4 && xmlhttp.status==200)
+			{
+				var obj = JSON.parse(xmlhttp.responseText);
+				document.getElementById("enaLora").checked = obj.enaLora;
+				document.getElementsByName("currentRideID")[0].value = obj.currentRideID;
+				document.getElementsByName("detectVal")[0].value = obj.detectVal;
+			}
+		}
+		xmlhttp.open("GET", "/config.json", false );
+		xmlhttp.send();
+	}
+	loadConfig();
+
+	function saveConfig() {
+		var params = "enaLora="+document.getElementById("enaLora").checked+"&currentRideID="+document.getElementsByName("currentRideID")[0].value+"&detectVal="+document.getElementsByName("detectVal")[0].value;
+		var xhr = new XMLHttpRequest();
+		xhr.open("GET", "/saveconfig?"+params, true);
+		xhr.send(null);
+	}
+</script>

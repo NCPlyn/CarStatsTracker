@@ -16,12 +16,24 @@ app.post('/uplink', function (req, res) {
 	var buf = Buffer.from(jsonParsed.uplink_message.frm_payload, 'base64');
 	var str = buf.toString('utf-8');
 	console.log(str);
-	const dataArray = str.split(";");
+	parseData(str);
+  res.status(200).end()
+});
+
+app.get('/directuplink', (req, res) => {
+	if(!req.params.data || req.params.data == "")
+    return res.send("no param or empty");
+
+  parseData(req.query.data);
+	res.status(200).end()
+});
+
+function parseData(input) {
+	const dataArray = input.split(";");
 	var out = {rideId:dataArray[0],moving:dataArray[1],lat:parseFloat(dataArray[2]),lng:parseFloat(dataArray[3]),speed:parseFloat(dataArray[4]),epoch:dataArray[5]};
   io.emit("loraDecoded", out.moving, out.lat, out.lng, out.speed, out.epoch);
 	saveUplink(out);
-  res.status(200).end()
-});
+}
 
 function search(array, insert, cb) {
     var left = -1, right = array.length, actual;
@@ -35,6 +47,9 @@ function search(array, insert, cb) {
         if (cb(array[actual]) > cb(insert)) {
             right = actual;
         }
+				if (cb(array[actual]) == cb(insert)) {
+					return -1;
+				}
     }
     return left;
 }
@@ -45,8 +60,10 @@ function saveUplink(data) {
 		currentFileContent = JSON.parse(fs.readFileSync("routes/"+String(data.rideId)+".json", 'utf8'));
 		let insert = {"moving":data.moving,"lat":data.lat,"lng":data.lng,"speed":data.speed,"epoch":data.epoch};
 		var index = search(currentFileContent, insert, function (a) { return a.epoch; });
-		currentFileContent.splice(index + 1, 0, insert);
-		setTimeout(function(){calcStuff(data.rideId);}, 5000);
+		if (index != -1) {
+			currentFileContent.splice(index + 1, 0, insert);
+			setTimeout(function(){calcStuff(data.rideId);}, 5000); //only once if multile asap
+		}
   } else { //create entry in db
 		let dbData = JSON.parse(fs.readFileSync("routes.json", 'utf8'));
     dbData.push({"id": data.rideId,"startEpoch": 0,"max": 0,"avg": 0,"total": 0});

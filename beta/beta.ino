@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <sstream>
 #include <WiFi.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
@@ -18,6 +19,7 @@
 
 #define LORALED 26
 
+//------------------SD CARD------------------//
 #define SD_CS 15
 #define SPI_SCK 14
 #define SPI_MISO 27
@@ -25,6 +27,7 @@
 SPIClass SPISD(HSPI);
 //Also to properly work, add "VSPI" to the () in 'SX126x-Arduino\src\boards\mcu\spi_board.cpp' on line 5
 
+//------------------LORA------------------//
 #define LORAWAN_APP_DATA_BUFF_SIZE 50 // Size of the data to be transmitted
 #define JOINREQ_NBTRIALS 3  // Number of trials for the join request
 hw_config hwConfig;
@@ -52,20 +55,31 @@ void copyArrays() {
   memcpy(nodeAppsKey,STOREDnodeAppsKey,sizeof(STOREDnodeAppsKey));
 }
 
-AsyncWebServer server(80);
-
-const char* ssid = "ESP";
+//------------------WiFi & Web------------------//
+const char* ssid = "CST";
 const char* password = "1234567890";
+
+AsyncWebServer server(80);
 
 void notFound(AsyncWebServerRequest *request) {
   request->send(404, "text/plain", "Not found");
 }
 
+//------------------GPS & IMU ------------------//
 TinyGPSPlus gps;
 TinyGPSCustom gpsFix(gps, "GPGGA", 6);
 
 LSM6DS3 myIMU;
 
+//------------------Variable declaration------------------//
+float deadzoneX=0,deadzoneY=0,deadzoneZ=0;
+
+int opMode = 0; //0 - normal, 1 - drag
+int currentRideID = 0;
+bool enaLora = true; //false - GSM
+float detectVal=0.4;
+
+//------Drag------
 const int numOfSpeeds = 2;
 int targetSpeeds[30] = {30,50};
 float targetSpeedsTime[30];
@@ -74,14 +88,14 @@ const int numOfDistances = 4;
 int targetDistances[30] = {100,201,305,402};
 float targetDistancesTime[30];
 
-unsigned long gpsStatMillis = millis();
-float deadzoneX=0,deadzoneY=0,deadzoneZ=0;
-float detectVal=0.4;
-bool doDrag = false, gpsReady = false;
+bool dragging = false, doDrag = false;
 
-int opMode = 0; //0 - normal, 1 - drag
-int currentRideID = 0;
-bool enaLora = true;
+//------Normal------
+unsigned long detectMoveMillis = millis(), lastLora = millis();
+bool detectMove = true, moveDetected = false, routeActive = false, gpsReady = false;
+int retryMoveDetect = 0, didntMove = 0;
+double lastLat = 48.85826, lastLng = 2.294516;
+
 
 bool loadSPIFFS() {
   DynamicJsonDocument doc(512);
@@ -104,6 +118,7 @@ bool loadSPIFFS() {
 
   currentRideID = doc["currentRideID"].as<int>();
   enaLora = doc["enaLora"].as<bool>();
+  detectVal = doc["detectVal"].as<float>();
   return true;
 }
 
@@ -120,6 +135,7 @@ bool saveSPIFFS() {
 
   doc["currentRideID"] = currentRideID;
   doc["enaLora"] = enaLora;
+  doc["detectVal"] = detectVal;
 
   if (serializeJson(doc, file) == 0) {
     Serial.println("Failed to deserialize the config file");
@@ -132,13 +148,6 @@ bool saveSPIFFS() {
 }
 
 void setup() {
-  for(int x = 0;x<numOfSpeeds;x++) {
-    targetSpeedsTime[x] = 0;
-  }
-  for(int x = 0;x<numOfDistances;x++) {
-    targetDistancesTime[x] = 0;
-  }
-
   Serial.begin(115200);
   delay(1000);
   Serial.println("Processor came out of reset.\n");
@@ -147,10 +156,17 @@ void setup() {
     Serial.println("An Error has occurred while mounting SPIFFS");
   }
 
+  for(int x = 0;x<numOfSpeeds;x++) {
+    targetSpeedsTime[x] = 0;
+  }
+  for(int x = 0;x<numOfDistances;x++) {
+    targetDistancesTime[x] = 0;
+  }
+
   pinMode(SD_CS, OUTPUT);
   SPISD.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
   if(!SD.begin(SD_CS,SPISD)){
-      Serial.println("Card Mount Failed");
+    Serial.println("Card Mount Failed");
   } else {
     Serial.printf("Used space: %lluMB\n", SD.usedBytes() / (1024 * 1024));
   }
@@ -166,16 +182,34 @@ void setup() {
   WiFi.softAP(ssid, password);
   Serial.println(WiFi.softAPIP());
 
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    String sout = "<a href='/drag'>DRAG</a><br><a href='/normal'>NORMAL</a>";
-    request->send(200, "text/html", sout);
+  server.serveStatic("/", LITTLEFS, "/").setDefaultFile("index.html");
+
+  server.on("/opmode", HTTP_GET, [](AsyncWebServerRequest *request){
+    if(request->hasParam("val")) {
+      modeSwitch(request->getParam("rideid")->value().toInt());
+      if(request->getParam("rideid")->value() == 0) {
+        request->redirect("/");
+      } else {
+        request->redirect("/drag.html");
+      }
+    }
+    request->send(200, "text/plain", "No param 'val'");
   });
-  server.on("/drag", HTTP_GET, [](AsyncWebServerRequest *request){
-    modeSwitch(1);
-    request->send(200, "text/plain", "ok");
+  server.on("/doDrag", HTTP_GET, [](AsyncWebServerRequest *request){
+    if(opMode == 1 && gpsReady && !doDrag) {
+      calibrateAcc();
+      doDrag = true;
+      request->redirect("/drag.html");
+    } else if (opMode == 0) {
+      request->send(200, "text/plain", "not in drag mode");
+    } else if (!gpsReady) {
+      request->send(200, "text/plain", "GPS not ready: age("+String(gps.location.age())+"), fix("+String(gpsFix.value())+"), sats("+String(gps.satellites.value())+")");
+    } else {
+      request->send(200, "text/plain", "Drag already in progress or other.");
+    }
   });
-  server.on("/normal", HTTP_GET, [](AsyncWebServerRequest *request){
-    modeSwitch(0);
+  server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest *request){
+    calibrateAcc();
     request->send(200, "text/plain", "ok");
   });
   server.on("/getfile", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -198,6 +232,37 @@ void setup() {
       request->send(200, "text/plain", "Parameter 'rideid' not present!");
     }
   });
+  server.on("/getfiles", HTTP_GET, [](AsyncWebServerRequest *request){
+    String out;
+    File root = SD.open("/");
+    if(!root){
+        Serial.println("Failed to open directory");
+        return;
+    }
+
+    File file = root.openNextFile();
+    while(file){
+        if(!file.isDirectory()){
+          out += String(file.name())+";";
+        }
+        file = root.openNextFile();
+    }
+    request->send(200, "text/plain", out);
+  });
+  server.on("/saveconfig", HTTP_GET, [](AsyncWebServerRequest *request){ //saves config
+    if(request->hasParam("enaLora"))
+      std::istringstream(request->getParam("enaLora")->value().c_str()) >> std::boolalpha >> enaLora;
+    if(request->hasParam("currentRideID"))
+      currentRideID = request->getParam("currentRideID")->value().toInt();
+    if(request->hasParam("detectVal"))
+      detectVal = String(request->getParam("detectVal")->value()).substring(0, 4).toFloat();
+    if(saveSPIFFS()) {
+      ESP.restart();
+      request->redirect("/");
+    } else {
+      request->send(200, "text/plain", "Saving config failed!");
+    }
+  });
 
   server.onNotFound(notFound);
   server.begin();
@@ -208,61 +273,52 @@ void setup() {
   if(enaLora) {
     copyArrays();
     LoraSetup();
+  } else {
+    //GSM init
   }
 }
-
-unsigned long detectMoveMillis = millis(), lastLora = millis(), lastNotMovedLora = millis();
-bool moveDetected = false, routeActive = false, detectMove = true, dragging = false;
-int retry = 0,didntMove = 0;
-double lastLat = 48.85826 ,lastLng = 2.294516, startLat = 0.0, startLng = 0.0;
 
 void loop()
 {
   while (Serial2.available() > 0) {
     if (gps.encode(Serial2.read())) {
-      if(millis()>(gpsStatMillis+5000)) {
-        if(gps.location.age() > 2000 || gpsFix.value() == 0 || gps.satellites.value() < 2) {
-          gpsReady = false;
-        } else {
-          gpsReady = true;
-        }
-        gpsStatMillis = millis();
+      if(!gps.location.isValid() || gps.location.age() > 2000 || gpsFix.value() == 0 || gps.satellites.value() < 2) {
+        gpsReady = false;
+      } else {
+        gpsReady = true;
       }
     }
   }
 
-  if(gpsReady==true && routeActive==false && millis()>lastNotMovedLora+60000){ //předělat na delší čas,
+  if(gpsReady==true && routeActive==false && millis()>lastLora+60000){ //předělat na delší čas,
     Serial.println("sending data");
     sendPos("n");
-    lastNotMovedLora = millis();
+    lastLora = millis();
   }
 
   if(opMode == 0) {
-    if(digitalRead(0) == LOW) {
-      calibrateAcc();
-    }
     if(detectMove && millis()>(detectMoveMillis+5000) && ((myIMU.readFloatAccelX()-deadzoneX)>detectVal || (myIMU.readFloatAccelY()-deadzoneY)>detectVal || (myIMU.readFloatAccelZ()-deadzoneZ)>detectVal)) {
       Serial.println("Movement detected on accel");
       moveDetected = true;
       detectMove = false;
+      retryMoveDetect = 0, didntMove = 0;
       detectMoveMillis = millis();
     }
     if(millis()>(detectMoveMillis+10000) && moveDetected) { //has to be better
       Serial.println(gps.speed.kmph());
-      if(gps.location.isValid() && gps.speed.kmph() > 5) {
+      if(gpsReady && gps.speed.kmph() > 5) {
         Serial.println("We movin");
         routeActive = true;
         moveDetected = false;
         currentRideID++;
         saveSPIFFS();
       } else {
-        if(retry < 3) {
-          retry++;
+        if(retryMoveDetect < 3) {
+          retryMoveDetect++;
           detectMoveMillis = millis();
-        } else if (retry > 2) {
+        } else if (retryMoveDetect > 2) {
           moveDetected = false;
           detectMove = true;
-          retry = 0;
           Serial.println("Failed to move");
         }
       }
@@ -275,36 +331,20 @@ void loop()
         } else if (didntMove > 2) {
           routeActive = false;
           detectMove = true;
-          didntMove = 0;
-          //save route
         }
+      } else {
+        didntMove = 0;
       }
       lastLat = gps.location.lat();
       lastLng = gps.location.lng();
-      //send rideId,moving(y/n),lat,lng,kmph,epochTime
       sendPos("y");
       lastLora = millis();
     }
   } else if(opMode == 1) {
-    if(digitalRead(0) == LOW && gpsReady && !doDrag) {
-      calibrateAcc();
-      doDrag = true;
-    } else if (digitalRead(0) == LOW && !gpsReady) {//better
-      Serial.print("GPS is not ready, current info (age,fix,sats): ");
-      Serial.print(gps.location.age());
-      Serial.print(",");
-      Serial.print(gpsFix.value());
-      Serial.print(",");
-      Serial.println(gps.satellites.value());
-      delay(100);
-    }
-
     if(doDrag == true) {
       if((myIMU.readFloatAccelX()-deadzoneX)>detectVal || (myIMU.readFloatAccelY()-deadzoneY)>detectVal || (myIMU.readFloatAccelZ()-deadzoneZ)>detectVal) {
-        Serial.println("Movement detected on X");
+        Serial.println("Movement detected");
         doDrag = false;
-        startLat = gps.location.lat();
-        startLng = gps.location.lng();
         dragTimer();
       }
     }
@@ -323,8 +363,10 @@ bool sendPos(String moving) { //rideid;moving;lat;lng;kmph;epoch - opravdu celý
   String out = String(currentRideID)+";"+moving+";"+String(gps.location.lat(),5)+";"+String(gps.location.lng(),5)+";"+String(gps.speed.kmph())+";"+String(getUnix(gps.date.year(),gps.date.month(),gps.date.day(),gps.time.hour(),gps.time.minute(),gps.time.second()));
   Serial.println(out);
   fileOper(SD,"/"+String(currentRideID)+".data",out);
-  if(enaLora) { /*&& loraReady*/
+  if(enaLora) { //&& loraReady
     send_lora_frame(out);
+  } else { //gsm ready
+    //GSM send
   }
 }
 
@@ -360,7 +402,9 @@ void modeSwitch(int opm) {
   } else if (opMode == 1 && opm == 0) {
     doDrag = false;
     dragging = false;
+    opMode = 0;
   }
+  calibrateAcc();
 }
 
 void calibrateAcc() {
@@ -377,7 +421,8 @@ void calibrateAcc() {
   Serial.println("Calibration done");
 }
 
-int dragTimer() { //this needs to run on another core
+int dragTimer() {
+  double startLat = gps.location.lat(), startLng = gps.location.lng();
   unsigned long startTime = millis();
   float currentSpeed = 0, currentDistance = 0;
   Serial.println("Drag started");

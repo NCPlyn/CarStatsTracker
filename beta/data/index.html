@@ -1,0 +1,58 @@
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=">
+    <meta charset="UTF-8">
+    <title>CarStatsTracker</title>
+  </head>
+  <style>
+    #map {
+      height: 80%;
+    }
+    a,a:link,a:visited {
+      color:white;
+    }
+    body {
+      font-family:Verdana;
+      background-color:#333743;
+      color:white;
+      text-align:center;
+    }
+    td {
+      margin-left: 1%;
+    }
+  </style>
+
+  <body>
+    <a href='/'>ROUTE</a> / <a href='/drag.html'>DRAG</a> / <a href='/config.html'>SETTINGS</a><br><hr>
+    <p>Pokud nemáte připojení k internetu, můžete soubor stáhnout a manuálně ho nahrát na server pro zobrazení.</p>
+    <p>Pokud naopak máte připojení k internetu a vaše zařízení je schopné využít dva druhy připojení, můžete využít interaktivní mapu.</p>
+    <a href="./map.html">ZDE</a><br><hr>
+    <table style="margin-left: auto;margin-right: auto;">
+      <tbody id="tablebody">
+      </tbody>
+    </table>
+  </body>
+</html>
+
+<script>
+  function loadFiles() {
+  	xmlhttp=new XMLHttpRequest();
+  	xmlhttp.onreadystatechange=function()
+  	{
+  		if (xmlhttp.readyState==4 && xmlhttp.status==200)
+  		{
+  			var partsArray = xmlhttp.responseText.split(';');
+  			partsArray.pop();
+  			for (var i = 0; i < partsArray.length; i++) {
+          var n = partsArray[i].indexOf('.');
+          var s = partsArray[i].substring(1, n != -1 ? n : partsArray[i].length);
+          document.getElementById("tablebody").innerHTML += "<th scope=\"row\">" + s + "</th><td><a href='./getfile?rideid="+s+"' download>Download</a></td></tr>";
+  			}
+  		}
+  	}
+  	xmlhttp.open("GET", "/getfiles", false );
+  	xmlhttp.send();
+  }
+  loadFiles();
+</script>

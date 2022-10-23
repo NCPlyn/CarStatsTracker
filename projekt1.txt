@@ -10,6 +10,7 @@ lora - funguje, ale kontrola připojení a obnovení připojení (asi koupit/vyr
 gps - hotovo
 sd - hotovo
 gsm - vůbec nic
+web - skoro, drag,css
 ----------------------------------------------
 normal mode:
 -every 10s sample gyro data and declare if we are moving or not
@@ -40,15 +41,14 @@ rideId,moving(y/n),lat,lng,kmph,epochTime
 
 ----------------------------------------------
 esp:
-dostat obecné nastavitelné proměnné do configu a stránku (kod z protogena) - config pro obecné variables, zapínat a vypínat věci (restart)
+dodělat web (drag - zprovoznit) (styl - navbar,table,drag)
 sent/save when on the way frequently(sd even more frequently), when stopped once a time
-web přímo na esp
-lora send drags (+sd karta)
-lora kontrola připojení
-wifi problems still?? try connecting now if you can and send data
+drag (sd karta save to json, předělat ať umí 20-100 etc., jenom přes gsm nebo ruční/automatický wifi uploader, aktualni data přes get ale ws by byl fajny)
+lora kontrola připojení (+ další examples prostudovat)
+wifi - connect to station? and send data (místo toho přes GSM?? může posílat furt a pokud není wifi)
 
 server:
-if uplink drag (prefix on rideId), save drag
+custom page uploader (takes file or textbox and does uplink)
 stránka (jiná barva row pokud drag)
 
 začít dělat pcb pomalu
