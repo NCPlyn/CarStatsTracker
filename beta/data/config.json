@@ -1,5 +1,6 @@
 {
 	"currentRideID":0,
+	"currentDragID":0,
 	"enaLora":true,
 	"detectVal":0.4
 }

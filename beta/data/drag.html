@@ -20,9 +20,65 @@
     <a href='/'>ROUTE</a> / <a href='/drag.html'>DRAG</a> / <a href='/config.html'>SETTINGS</a><br><hr>
     <h1>DRAG</h1>
     <button onclick="location.href='./doDrag'" type="button">DO-DRAG</button><br>
-    tlačítko na stop<br>
-    rychlost pomocí ws<br>
-    dosavadní info (brát z těch polí protože web jede na druhém jádru)<br>
-    nějak načíst bývalé dragy
+    <button onclick="location.href='./forceDragStart'" type="button">forceStart</button> <button onclick="location.href='./forceDragStop'" type="button">forceStop</button><br>
+    <h2 id="speed">0 km/h</h2>
+    <div id="status">
+      idunno, table kde se daji pridavat vzdalenosti a rychlosti a tady to bude potom se davat?<br>
+    </div>
+    <table style="margin-left: auto;margin-right: auto;">
+      <tbody id="tablebody">
+      </tbody>
+    </table>
   </body>
 </html>
+
+<script>
+//on click of DODRAG, build json, sent it, wait for good return, start timers for data refresh, once json returns ended drag, kill refreshers
+//keep speed running every 2s
+
+  function getSpeed() {
+    xmlhttp=new XMLHttpRequest();
+    xmlhttp.onreadystatechange=function()
+    {
+      if (xmlhttp.readyState==4 && xmlhttp.status==200)
+      {
+        document.getElementById("speed").innerHTML = xmlhttp.responseText;
+      }
+    }
+    xmlhttp.open("GET", "/getSpeed", false );
+    xmlhttp.send();
+  }
+  function getData() {
+    xmlhttp=new XMLHttpRequest();
+    xmlhttp.onreadystatechange=function()
+    {
+      if (xmlhttp.readyState==4 && xmlhttp.status==200)
+      {
+        document.getElementById("stauts").innerHTML = xmlhttp.responseText;
+      }
+    }
+    xmlhttp.open("GET", "/getProcDrag", false );
+    xmlhttp.send();
+  }
+  function loadFiles() { //edit to load into the status
+  	xmlhttp=new XMLHttpRequest();
+  	xmlhttp.onreadystatechange=function()
+  	{
+  		if (xmlhttp.readyState==4 && xmlhttp.status==200)
+  		{
+  			var partsArray = xmlhttp.responseText.split(';');
+  			partsArray.pop();
+  			for (var i = 0; i < partsArray.length; i++) {
+          if(partsArray[i].includes("d")) {
+            var n = partsArray[i].indexOf('.');
+            var s = partsArray[i].substring(1, n != -1 ? n : partsArray[i].length);
+            document.getElementById("tablebody").innerHTML += "<th scope=\"row\">" + s + "</th><td><a href='./getfile?rideid="+s+"' download>Load</a></td></tr>";
+          }
+  			}
+  		}
+  	}
+  	xmlhttp.open("GET", "/getfiles", false );
+  	xmlhttp.send();
+  }
+  loadFiles();
+</script>

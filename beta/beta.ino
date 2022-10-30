@@ -33,8 +33,6 @@ SPIClass SPISD(HSPI);
 hw_config hwConfig;
 // Foward declaration
 static void lorawan_has_joined_handler(void);
-static void lorawan_rx_handler(lmh_app_data_t *app_data);
-static void lorawan_confirm_class_handler(DeviceClass_t Class);
 static void lorawan_join_failed_handler(void);
 static void send_lora_frame(void);
 static uint8_t m_lora_app_data_buffer[LORAWAN_APP_DATA_BUFF_SIZE]; // Lora user application data buffer.
@@ -75,20 +73,24 @@ LSM6DS3 myIMU;
 float deadzoneX=0,deadzoneY=0,deadzoneZ=0;
 
 int opMode = 0; //0 - normal, 1 - drag
-int currentRideID = 0;
+int currentRideID = 0, currentDragID = 0;
 bool enaLora = true; //false - GSM
 float detectVal=0.4;
 
 //------Drag------
-const int numOfSpeeds = 2;
+int numOfSpeeds = 2;
 int targetSpeeds[30] = {30,50};
-float targetSpeedsTime[30];
+double targetSpeedsTime[30], targetSpeedsDist[30];
 
-const int numOfDistances = 4;
+int numOfDistances = 4;
 int targetDistances[30] = {100,201,305,402};
-float targetDistancesTime[30];
+double targetDistancesTime[30];
 
 bool dragging = false, doDrag = false;
+double startLat = 0, startLng = 0;
+unsigned long startTime = 0;
+
+String dragJson;
 
 //------Normal------
 unsigned long detectMoveMillis = millis(), lastLora = millis();
@@ -117,6 +119,7 @@ bool loadSPIFFS() {
   file.close();
 
   currentRideID = doc["currentRideID"].as<int>();
+  currentDragID = doc["currentDragID"].as<int>();
   enaLora = doc["enaLora"].as<bool>();
   detectVal = doc["detectVal"].as<float>();
   return true;
@@ -134,6 +137,7 @@ bool saveSPIFFS() {
   Serial.println("Config file opened!");
 
   doc["currentRideID"] = currentRideID;
+  doc["currentDragID"] = currentDragID;
   doc["enaLora"] = enaLora;
   doc["detectVal"] = detectVal;
 
@@ -198,6 +202,30 @@ void setup() {
   server.on("/doDrag", HTTP_GET, [](AsyncWebServerRequest *request){
     if(opMode == 1 && gpsReady && !doDrag) {
       calibrateAcc();
+      //get json and put it in global string
+      dragJson = request->getParam("json")->value();
+      //parse
+      DynamicJsonDocument doc(2048);
+      DeserializationError error = deserializeJson(doc, file);
+      if (error){
+        Serial.println("Failed to deserialize json");
+        request->send(200, "text/plain", "Failed to deserialize json");
+      }
+      //for each speed get 'target', write it to the array
+      //doc["speed"][i]["targ"].as<int>()
+      numOfDistances = 0;
+      JsonArray distanceArray = doc["dist"];
+      for (JsonObject t : distanceArray) {
+        targetDistances[numOfDistances] = t["targ"].as<int>();
+        numOfDistances++;
+      }
+      //do same for distance
+      numOfSpeeds = 0;
+      JsonArray speedArray = doc["speed"];
+      for (JsonObject t : speedArray) {
+        targetSpeeds[numOfSpeeds] = t["targ"].as<int>();
+        numOfSpeeds++;
+      }
       doDrag = true;
       request->redirect("/drag.html");
     } else if (opMode == 0) {
@@ -208,9 +236,39 @@ void setup() {
       request->send(200, "text/plain", "Drag already in progress or other.");
     }
   });
+  server.on("/forceDragStop", HTTP_GET, [](AsyncWebServerRequest *request){
+    dragging = false;
+    request->redirect("/drag.html");
+  });
+  server.on("/forceDragStart", HTTP_GET, [](AsyncWebServerRequest *request){
+    if(opMode == 1 && gpsReady && doDrag) {
+      dragTimer();
+      request->redirect("/drag.html");
+    } else if (opMode == 0) {
+      request->send(200, "text/plain", "not in drag mode");
+    } else if (!gpsReady) {
+      request->send(200, "text/plain", "GPS not ready: age("+String(gps.location.age())+"), fix("+String(gpsFix.value())+"), sats("+String(gps.satellites.value())+")");
+    } else if (!doDrag) {
+      request->send(200, "text/plain", "Didn't start drag (it will sent needed data).");
+    } else {
+      request->send(200, "text/plain", "Drag already in progress or other.");
+    }
+  });
   server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest *request){
     calibrateAcc();
     request->send(200, "text/plain", "ok");
+  });
+  server.on("/getSpeed", HTTP_GET, [](AsyncWebServerRequest *request){
+    if(gpsReady) {
+      request->send(200, "text/plain", String(gps.speed.kmph()) + " km/h");
+    } else {
+      request->send(200, "text/plain", "GPS not ready");
+    }
+  });
+  server.on("/getProcDrag", HTTP_GET, [](AsyncWebServerRequest *request){
+    char proccesed[2048];
+    processDrag(true, proccesed, startTime, startLat, startLng);
+    request->send(200, "text/plain", proccesed);
   });
   server.on("/getfile", HTTP_GET, [](AsyncWebServerRequest *request){
     if(request->hasParam("rideid")) {
@@ -254,6 +312,8 @@ void setup() {
       std::istringstream(request->getParam("enaLora")->value().c_str()) >> std::boolalpha >> enaLora;
     if(request->hasParam("currentRideID"))
       currentRideID = request->getParam("currentRideID")->value().toInt();
+    if(request->hasParam("currentDragID"))
+      currentRideID = request->getParam("currentDragID")->value().toInt();
     if(request->hasParam("detectVal"))
       detectVal = String(request->getParam("detectVal")->value()).substring(0, 4).toFloat();
     if(saveSPIFFS()) {
@@ -397,7 +457,6 @@ void modeSwitch(int opm) {
     routeActive = false;
     detectMove = true;
     didntMove = 0;
-    //save route
     opMode = 1;
   } else if (opMode == 1 && opm == 0) {
     doDrag = false;
@@ -422,9 +481,10 @@ void calibrateAcc() {
 }
 
 int dragTimer() {
-  double startLat = gps.location.lat(), startLng = gps.location.lng();
-  unsigned long startTime = millis();
-  float currentSpeed = 0, currentDistance = 0;
+  startLat = gps.location.lat();
+  startLng = gps.location.lng();
+  startTime = millis();
+  double currentSpeed = 0, currentDistance = 0;
   Serial.println("Drag started");
   dragging = true;
 
@@ -440,14 +500,15 @@ int dragTimer() {
     for(int x = 0;x<numOfSpeeds;x++){
       if(targetSpeedsTime[x] == 0) {
         if(currentSpeed > targetSpeeds[x]) {
-          targetSpeedsTime[x] = float(millis()-startTime-gps.location.age())/1000;
+          targetSpeedsTime[x] = double(millis()-startTime-gps.location.age())/1000;
+          targetSpeedsDist[x] = currentDistance;
         }
       }
     }
     for(int x = 0;x<numOfDistances;x++){
       if(targetDistancesTime[x] == 0) {
         if(currentDistance > targetDistances[x]) {
-          targetDistancesTime[x] = float(millis()-startTime-gps.location.age())/1000;
+          targetDistancesTime[x] = double(millis()-startTime-gps.location.age())/1000;
         }
       }
     }
@@ -463,6 +524,61 @@ int dragTimer() {
   for(int x = 0;x<numOfDistances;x++){
     Serial.printf("%d m in %f sec\n", targetDistances[x], targetDistancesTime[x]);
     targetDistancesTime[x] = 0;
+  }
+
+  processDrag(false, null, startTime, startLat, startLng);
+}
+
+void processDrag(bool web, char* out, unsigned long startTime, double startLat, double startLng) {
+  DynamicJsonDocument doc(2048);
+  DeserializationError error = deserializeJson(doc, dragJson);
+  if (error){
+    Serial.println("Failed to deserialize json");
+  }
+
+  if(web) {
+    doc["ended"] = false;
+  } else {
+    doc["ended"] = true;
+  }
+
+  JsonArray startData = doc.createNestedArray("startData");
+  startData.add(startTime);
+  startData.add(startLat);
+  startData.add(startLng);
+
+  JsonArray distanceArray = doc["dist"];
+  for (JsonObject t : distanceArray) {
+    for(int x = 0; x < numOfDistances; x++) {
+      if(targetDistances[x] == t["targ"].as<int>()) {
+        t["time"] = targetDistancesTime[x];
+        break;
+      }
+    }
+  }
+  JsonArray speedArray = doc["speed"];
+  for (JsonObject t : speedArray) {
+    for(int x = 0; x < numOfSpeeds; x++) {
+      if(targetSpeeds[x] == t["targ"].as<int>()) {
+        t["time"] = targetSpeedsTime[x];
+        t["dist"] = targetSpeedsDist[x];
+        break;
+      }
+    }
+  }
+
+  if(web) {
+    serializeJson(doc, out);
+  } else {
+    File file = SD.open("/d"+String(currentDragID)+".data", FILE_WRITE);
+    if(!file){
+      Serial.println("Failed to open file to write");
+      return;
+    }
+    serializeJson(doc, file);
+    file.close();
+    currentDragID++;
+    saveSPIFFS();
   }
 }
 
@@ -543,54 +659,6 @@ static void lorawan_has_joined_handler(void) {
 
   //lora ready (what about not ready? disconnected..)
   digitalWrite(LORALED, HIGH);
-}
-
-//Function for handling LoRaWan received data from Gateway
-static void lorawan_rx_handler(lmh_app_data_t *app_data) { //app_data - Pointer to rx data
-  Serial.printf("LoRa Packet received on port %d, size:%d, rssi:%d, snr:%d\n",
-  			  app_data->port, app_data->buffsize, app_data->rssi, app_data->snr);
-
-  switch (app_data->port)
-  {
-  case 3:// Port 3 switches the class
-  	if (app_data->buffsize == 1)
-  	{
-  		switch (app_data->buffer[0])
-  		{
-  		case 0:
-  			lmh_class_request(CLASS_A);
-  			break;
-
-  		case 1:
-  			lmh_class_request(CLASS_B);
-  			break;
-
-  		case 2:
-  			lmh_class_request(CLASS_C);
-  			break;
-
-  		default:
-  			break;
-  		}
-  	}
-  	break;
-
-  case LORAWAN_APP_PORT:
-  	// YOUR_JOB: Take action on received data
-  	break;
-
-  default:
-  	break;
-  }
-}
-
-static void lorawan_confirm_class_handler(DeviceClass_t Class) {
-  Serial.printf("switch to class %c done\n", "ABC"[Class]);
-
-  // Informs the server that switch has occurred ASAP
-  m_lora_app_data.buffsize = 0;
-  m_lora_app_data.port = LORAWAN_APP_PORT;
-  lmh_send(&m_lora_app_data, LMH_UNCONFIRMED_MSG);
 }
 
 static void send_lora_frame(String toSend) {

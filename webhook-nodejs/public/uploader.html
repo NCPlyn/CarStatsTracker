@@ -1,0 +1,80 @@
+<html>
+  <head>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CarStatsTracker</title>
+  </head>
+  <body class="h-100 d-flex align-items-center justify-content-center">
+    <div class="container">
+      <h1>Manual uploader</h1>
+      <form>
+        <p>Select .data file:</p>
+        <input id="fileInput" type="file" name="file" accept=".data,.txt"/><br><hr>
+        <p>Data to be uploaded:</p>
+        <textarea id="txtarea"></textarea><br><hr>
+        <button id="up" type="button" class="btn btn-dark">Upload</button>
+      </form>
+    </div>
+  </body>
+  <style>
+    html,body {
+      height: 100%;
+      background-color:#282C34;
+      color:white;
+      text-align:center;
+      font-family:verdana;
+    }
+    textarea {
+      background-color:#21252B;
+      color:white;
+      border:2px solid #3B4048;
+      border-radius:12px;
+      padding: 5px 8px;
+    }
+    .btn-dark {
+      border:2px solid #3B4048;
+      border-radius:12px;
+    }
+    h1 {
+      font-weight:bold;
+      margin-bottom:3%;
+    }
+    textarea {
+      width:50%;
+      height:20%;
+      resize: both;
+    }
+  </style>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
+  <script>
+    const socket = io();
+
+    $("form").on('change','#fileInput',function(e){handleFileSelect(e);});
+
+    function handleFileSelect(event) {
+      const reader = new FileReader()
+      reader.onload = handleFileLoad;
+      reader.readAsText(event.target.files[0])
+    }
+
+    function handleFileLoad(event) {
+      $('#txtarea').val(event.target.result);
+    }
+
+    $("#up").on("click",function(){sendLines();});
+
+    function sendLines() {
+      let lines = $('#txtarea').val().split('\n');
+      for(var i = 0;i < lines.length;i++){
+        console.log(lines[i]);
+        socket.emit('upload', lines[i]);
+      }
+    }
+
+    socket.on('error', (msg) => {
+      alert(msg);
+    });
+  </script>
+</html>
