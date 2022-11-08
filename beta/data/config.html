@@ -24,6 +24,7 @@
     <a href='/opmode?val=1'>DRAG</a><br>
     <a href='/opmode?val=0'>NORMAL</a><br>
     <a href='/calibrate'>CALIBRATE</a><br>
+    LoraStatus <b id="lorastatus"></b> - <a href='/lora?join'>LoraWAN join</a><br>
     <form>
       <input type="checkbox" id="enaLora">
       <label for="enaLora"> enaLora</label><br>
@@ -64,4 +65,18 @@
 		xhr.open("GET", "/saveconfig?"+params, true);
 		xhr.send(null);
 	}
+
+  function loadLoraStatus() {
+		xmlhttp=new XMLHttpRequest();
+		xmlhttp.onreadystatechange=function()
+		{
+			if (xmlhttp.readyState==4 && xmlhttp.status==200)
+			{
+				document.getElementById("lorastatus").innerHTML = xmlhttp.responseText;
+			}
+		}
+		xmlhttp.open("GET", "/lora", false );
+		xmlhttp.send();
+	}
+	loadLoraStatus();
 </script>

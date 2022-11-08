@@ -15,16 +15,88 @@
       background-color:#333743;
       color:white;
     }
+
+    table, td, th {
+      border-color: white;
+      border: 1px solid;
+      border-collapse: collapse;
+      table-layout: fixed;
+      min-width: 500px;
+      width: 5vw;
+      text-align: center;
+    }
+
   </style>
   <body>
     <a href='/'>ROUTE</a> / <a href='/drag.html'>DRAG</a> / <a href='/config.html'>SETTINGS</a><br><hr>
     <h1>DRAG</h1>
-    <button onclick="location.href='./doDrag'" type="button">DO-DRAG</button><br>
+    <button onclick="doDrag()" type="button">DO-DRAG</button><br>
+    <p id="dodragstat"></p>
     <button onclick="location.href='./forceDragStart'" type="button">forceStart</button> <button onclick="location.href='./forceDragStop'" type="button">forceStop</button><br>
     <h2 id="speed">0 km/h</h2>
-    <div id="status">
-      idunno, table kde se daji pridavat vzdalenosti a rychlosti a tady to bude potom se davat?<br>
+    <hr>
+    <div>
+      <h2>Speed</h2>
+      <form>
+        <label for="Sfrom">From: </label>
+        <input type="number" name="Sfrom" id="Sfrom" min="0" max="300" placeholder="0"><br>
+        <label for="Sto">To: </label>
+        <input type="number" name="Sto" id="Sto" min="0" max="300" placeholder="100"><br>
+        <br>
+        <button type="button" onclick="addTableSpeed()">Add speed</button>
+      </form>
+      <table style="margin-left: auto;margin-right: auto;" id="TS">
+        <thead>
+          <tr>
+            <th>From</th>
+            <th>To</th>
+            <th>Time</th>
+            <th>Distance</th>
+            <th>Remove?</th>
+          </tr>
+        </thead>
+        <tbody id="TSbody">
+          <tr>
+            <td>0</td>
+            <td>50</td>
+            <td></td>
+            <td></td>
+            <td><button onclick="document.getElementById('TS').deleteRow(1);">Remove</button></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
+    <br>
+    <div>
+      <h2>Distance</h2>
+      <form>
+        <label for="Dfrom">From: </label>
+        <input type="number" name="Dfrom" id="Dfrom" min="0" max="3000" placeholder="0"><br>
+        <label for="Dto">To: </label>
+        <input type="number" name="Dto" id="Dto" min="0" max="3000" placeholder="100"><br>
+        <br>
+        <button type="button" onclick="addTableDist()">Add distance</button>
+      </form>
+      <table style="margin-left: auto;margin-right: auto;" id="TD">
+        <thead>
+          <tr>
+            <th>From</th>
+            <th>To</th>
+            <th>Time</th>
+            <th>Remove?</th>
+          </tr>
+        </thead>
+        <tbody id="TDbody">
+          <tr>
+            <td>0</td>
+            <td>100</td>
+            <td></td>
+            <td><button onclick="document.getElementById('TD').deleteRow(1);">Remove</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <br><hr>
     <table style="margin-left: auto;margin-right: auto;">
       <tbody id="tablebody">
       </tbody>
@@ -35,6 +107,103 @@
 <script>
 //on click of DODRAG, build json, sent it, wait for good return, start timers for data refresh, once json returns ended drag, kill refreshers
 //keep speed running every 2s
+  function addTableSpeed() {
+    if(Number(document.getElementById("Sfrom").value) < Number(document.getElementById("Sto").value)) {
+      var oRows = document.getElementById("TS").getElementsByTagName('td');
+      document.getElementById("TSbody").innerHTML += "<tr><td>"+document.getElementById("Sfrom").value+"</td><td>"+document.getElementById("Sto").value+"</td><td></td><td></td><td><button onclick=\"document.getElementById('TS').deleteRow("+(oRows.length+1)+");\">Remove</button></td></tr>";
+    } else {
+      alert("Speed 'from' cannot be bigger that speed 'to'");
+    }
+  }
+  function addTableDist() {
+    if(Number(document.getElementById("Dfrom").value) < Number(document.getElementById("Dto").value)) {
+      var oRows = document.getElementById("TD").getElementsByTagName('td');
+      document.getElementById("TDbody").innerHTML += "<tr><td>"+document.getElementById("Dfrom").value+"</td><td>"+document.getElementById("Dto").value+"</td><td></td><td><button onclick=\"document.getElementById('TD').deleteRow("+(oRows.length+1)+");\">Remove</button></td></tr>";
+    } else {
+      alert("Distance 'from' cannot be bigger that distance 'to'");
+    }
+  }
+
+  let dataInt;
+
+  function doDrag() {
+    let speedArray = [];
+
+    for(let x = 1; x < document.getElementById("TS").rows.length; x++) {
+      let num = Number(document.getElementById("TS").rows[x].cells.item(0).innerHTML);
+      if(!speedArray.includes(num) && num != 0) {
+        speedArray.push(num);
+      }
+      num = Number(document.getElementById("TS").rows[x].cells.item(1).innerHTML)
+      if(!speedArray.includes(num) && num != 0) {
+        speedArray.push(num);
+      }
+    }
+
+    let distArray = [];
+
+    for(let x = 1; x < document.getElementById("TD").rows.length; x++) {
+      let num = Number(document.getElementById("TD").rows[x].cells.item(0).innerHTML);
+      if(!distArray.includes(num) && num != 0) {
+        distArray.push(num);
+      }
+      num = Number(document.getElementById("TD").rows[x].cells.item(1).innerHTML)
+      if(!distArray.includes(num) && num != 0) {
+        distArray.push(num);
+      }
+    }
+
+    let obj = { speed: [], dist: [] };
+    let tempArray = [];
+
+    for(let x = 0; x < speedArray.length; x++) {
+      tempArray = [];
+      for(let y = 1; y < document.getElementById("TS").rows.length; y++) {
+        if(Number(document.getElementById("TS").rows[y].cells.item(1).innerHTML) == speedArray[x]) {
+          tempArray.push(Number(document.getElementById("TS").rows[y].cells.item(0).innerHTML));
+        }
+      }
+      if(tempArray.length == 0) {
+        obj.speed.push({targ: speedArray[x]});
+      } else {
+        obj.speed.push({targ: speedArray[x], from: tempArray});
+      }
+    }
+
+    for(let x = 0; x < distArray.length; x++) {
+      tempArray = [];
+      for(let y = 1; y < document.getElementById("TD").rows.length; y++) {
+        if(Number(document.getElementById("TD").rows[y].cells.item(1).innerHTML) == distArray[x]) {
+          tempArray.push(Number(document.getElementById("TD").rows[y].cells.item(0).innerHTML));
+        }
+      }
+      if(tempArray.length == 0) {
+        obj.dist.push({targ: distArray[x]});
+      } else {
+        obj.dist.push({targ: distArray[x], from: tempArray});
+      }
+    }
+
+    console.log(JSON.stringify(obj));
+
+    xmlhttp=new XMLHttpRequest();
+    xmlhttp.onreadystatechange=function()
+    {
+      if (xmlhttp.readyState==4 && xmlhttp.status==200)
+      {
+        let inString = xmlhttp.responseText;
+        document.getElementById("dodragstat").innerHTML = inString;
+        if(inString.charAt(1) == "W") {
+          dataInt = setInterval(function () {
+            getSpeed();
+            getData();
+          }, 1000);
+        }
+      }
+    }
+    xmlhttp.open("GET", "/doDrag&"+JSON.stringify(obj), false );
+    xmlhttp.send();
+  }
 
   function getSpeed() {
     xmlhttp=new XMLHttpRequest();
@@ -45,39 +214,101 @@
         document.getElementById("speed").innerHTML = xmlhttp.responseText;
       }
     }
-    xmlhttp.open("GET", "/getSpeed", false );
+    xmlhttp.open("GET", "/getSpeed", true );
     xmlhttp.send();
   }
-  function getData() {
-    xmlhttp=new XMLHttpRequest();
-    xmlhttp.onreadystatechange=function()
-    {
-      if (xmlhttp.readyState==4 && xmlhttp.status==200)
-      {
-        document.getElementById("stauts").innerHTML = xmlhttp.responseText;
+  getSpeed();
+  setInterval(function () {getSpeed();}, 10000);
+
+  function fillData(jsontoparse) {
+    document.getElementById("TSbody").innerHTML = "";
+    document.getElementById("TDbody").innerHTML = "";
+    let obj = JSON.parse(jsontoparse);
+    if(obj.ended == true && dataInt != null) {
+      clearInterval(dataInt);
+      dataInt = null;
+    }
+    for(let x = 0; x < obj.speed.length; x++) { //x = current targ
+      if(obj.speed[x].hasOwnProperty('from')) {
+        for(let y = 0; y < obj.speed[x].from.length; y++) { //y = current from in targ
+          let resultTime, resultDistance = 0;
+          if(obj.speed[x].from[y] == 0) {
+            resultTime = obj.speed[x].time;
+            resultDistance = obj.speed[x].dist;
+          } else {
+            for(let z = 0; z < obj.speed.length; z++) { //z = current targ
+              if(obj.speed[z].targ == obj.speed[x].from[y]) {
+                resultTime = obj.speed[x].time - obj.speed[z].time;
+                resultDistance = obj.speed[x].dist - obj.speed[z].dist;
+                break;
+              }
+            }
+          }
+          var oRows = document.getElementById("TS").getElementsByTagName('td');
+          document.getElementById("TSbody").innerHTML += "<tr><td>"+obj.speed[x].from[y]+"</td><td>"+obj.speed[x].targ+"</td><td>"+resultTime+"</td><td>"+resultDistance+"</td><td><button onclick=\"document.getElementById('TS').deleteRow("+(oRows.length+1)+");\">Remove</button></td></tr>";
+        }
       }
     }
-    xmlhttp.open("GET", "/getProcDrag", false );
+    for(let x = 0; x < obj.dist.length; x++) { //x = current targ
+      if(obj.speed[x].hasOwnProperty('from')) {
+        for(let y = 0; y < obj.dist[x].from.length; y++) { //y = current from in targ
+          let resultTime;
+          if(obj.dist[x].from[y] == 0) {
+            resultTime = obj.dist[x].time;
+          } else {
+            for(let z = 0; z < obj.dist.length; z++) { //z = current targ
+              if(obj.dist[z].targ == obj.dist[x].from[y]) {
+                resultTime = obj.dist[x].time - obj.dist[z].time;
+                break;
+              }
+            }
+          }
+          var oRows = document.getElementById("TD").getElementsByTagName('td');
+          document.getElementById("TDbody").innerHTML += "<tr><td>"+obj.dist[x].from[y]+"</td><td>"+obj.dist[x].targ+"</td><td>"+resultTime+"</td><td><button onclick=\"document.getElementById('TD').deleteRow("+(oRows.length+1)+");\">Remove</button></td></tr>";
+        }
+      }
+    }
+  }
+
+  function getData() { //{"speed":[{"targ":50,"from":[0], time: 1655468, dist: 150}],"dist":[{"targ":100,"from":[0], time: 1655468}]}
+    xmlhttp=new XMLHttpRequest();
+    xmlhttp.onreadystatechange=function() {
+      if (xmlhttp.readyState==4 && xmlhttp.status==200) {
+        console.log(xmlhttp.responseText);
+        fillData(xmlhttp.responseText);
+      }
+    }
+    xmlhttp.open("GET", "/getProcDrag", true );
     xmlhttp.send();
   }
-  function loadFiles() { //edit to load into the status
+
+  function loadFile(id) {
   	xmlhttp=new XMLHttpRequest();
-  	xmlhttp.onreadystatechange=function()
-  	{
-  		if (xmlhttp.readyState==4 && xmlhttp.status==200)
-  		{
+  	xmlhttp.onreadystatechange=function() {
+  		if (xmlhttp.readyState==4 && xmlhttp.status==200) {
+  			fillData(xmlhttp.responseText);
+  		}
+  	}
+  	xmlhttp.open("GET", "./getfile?rideid="+id, true );
+  	xmlhttp.send();
+  }
+
+  function loadFiles() {
+  	xmlhttp=new XMLHttpRequest();
+  	xmlhttp.onreadystatechange=function() {
+  		if (xmlhttp.readyState==4 && xmlhttp.status==200) {
   			var partsArray = xmlhttp.responseText.split(';');
   			partsArray.pop();
   			for (var i = 0; i < partsArray.length; i++) {
           if(partsArray[i].includes("d")) {
             var n = partsArray[i].indexOf('.');
             var s = partsArray[i].substring(1, n != -1 ? n : partsArray[i].length);
-            document.getElementById("tablebody").innerHTML += "<th scope=\"row\">" + s + "</th><td><a href='./getfile?rideid="+s+"' download>Load</a></td></tr>";
+            document.getElementById("tablebody").innerHTML += "<th>" + s + "</th><td><button onclick=\"loadFile("+s+")\" type=\"button\">Load</button></td></tr>";
           }
   			}
   		}
   	}
-  	xmlhttp.open("GET", "/getfiles", false );
+  	xmlhttp.open("GET", "/getfiles", true );
   	xmlhttp.send();
   }
   loadFiles();

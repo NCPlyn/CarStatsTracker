@@ -41,18 +41,24 @@ rideId,moving(y/n),lat,lng,kmph,epochTime
 
 ----------------------------------------------
 esp:
-lora - pokud se nepodaří připojit, zkusit znova za 10min a 3x? potom až po restartu (přejít na Helium?)
-sent/save when on the way frequently(sd even more frequently), when stopped once a time
-web (drag-zprovoznit & CSS - navbar,table,drag,settings,přepínaní & lora connected status)
-drag (sd karta save to json????, předělat ať umí 20-100 etc.???, jenom přes gsm nebo ruční/automatický wifi uploader, aktualni data přes get ale ws by byl fajny??? stránka)
--start pos+speed, distace array with times, speed array with times
-wifi - connect to station? and send data (místo toho přes GSM?? může posílat furt a pokud není wifi)
-GSM
+web (CSS - navbar,tables,drag,settings,přepínaní)
+wifi - celé udělat (connect to station if can, send data)
+GSM - celé udělat (send pos data & drag)
 
 server:
 podpora drag (zobrazení & uložení)
+parseData() - validiter
 
-začít dělat pcb pomalu
+1. odzkoušet vše zatím
+lora - přejít na Helium? - /lora get status and join????????test
+ride: sd-1min lora-5min?????????test
+firstLora is gonna make it?????test
+drag - saves on sd?????? returns right data?????? web works????? load drags????
+
+2. opravit chyby a pokusit se najít ostatní a opravit
+3. mqtt
+4. pcb & obal
+5. wifi sta - nějaká funkce na připojení?
 
 ----------------------------------------------
 WEB:
@@ -65,6 +71,7 @@ WEB:
 /calibrate - GET - Recalibration if needed
 /getSpeed - GET - Returns current speed
 /getProcDrag - GET - Returns JSON with current state of dragy
+/lora - GET - Returns loraStatus, if sent with "join" param, tries to join LoraWAN.
 /getfile - GET - Returns content of file from SDCard
   rideid: which rideid/dragid we want
 /getfiles - GET - Returns all of the files on the SDCard root seperated by ;

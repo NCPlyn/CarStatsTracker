@@ -34,12 +34,13 @@ hw_config hwConfig;
 // Foward declaration
 static void lorawan_has_joined_handler(void);
 static void lorawan_join_failed_handler(void);
+static void lorawan_rx_handler(lmh_app_data_t *app_data); //předdefinové, nepoužité
+static void lorawan_confirm_class_handler(DeviceClass_t Class); //--||--
 static void send_lora_frame(void);
 static uint8_t m_lora_app_data_buffer[LORAWAN_APP_DATA_BUFF_SIZE]; // Lora user application data buffer.
 static lmh_app_data_t m_lora_app_data = {m_lora_app_data_buffer, 0, 0, 0, 0}; // Lora user application data structure.
 static lmh_param_t lora_param_init = {LORAWAN_ADR_ON, DR_3, LORAWAN_PUBLIC_NETWORK, JOINREQ_NBTRIALS, LORAWAN_DEFAULT_TX_POWER, LORAWAN_DUTYCYCLE_OFF}; //Structure containing LoRaWan parameters, needed for lmh_init()
-static lmh_callback_t lora_callbacks = {BoardGetBatteryLevel, BoardGetUniqueId, BoardGetRandomSeed,
-  									lorawan_rx_handler, lorawan_has_joined_handler, lorawan_confirm_class_handler, lorawan_join_failed_handler};//Structure containing LoRaWan callback functions, needed for lmh_init()
+static lmh_callback_t lora_callbacks = {BoardGetBatteryLevel, BoardGetUniqueId, BoardGetRandomSeed, lorawan_rx_handler, lorawan_has_joined_handler, lorawan_confirm_class_handler, lorawan_join_failed_handler};//Structure containing LoRaWan callback functions, needed for lmh_init()
 
 uint8_t nodeDeviceEUI[8], nodeAppEUI[8];
 uint8_t nodeAppKey[16], nodeNwsKey[16], nodeAppsKey[16];
@@ -52,6 +53,8 @@ void copyArrays() {
   memcpy(nodeNwsKey,STOREDnodeNwsKey,sizeof(STOREDnodeNwsKey));
   memcpy(nodeAppsKey,STOREDnodeAppsKey,sizeof(STOREDnodeAppsKey));
 }
+
+int loraStatus = 0; //0 off, 1 joined, 2 failed
 
 //------------------WiFi & Web------------------//
 const char* ssid = "CST";
@@ -94,8 +97,8 @@ String dragJson;
 
 //------Normal------
 unsigned long detectMoveMillis = millis(), lastLora = millis();
-bool detectMove = true, moveDetected = false, routeActive = false, gpsReady = false;
-int retryMoveDetect = 0, didntMove = 0;
+bool detectMove = true, moveDetected = false, routeActive = false, gpsReady = false, firstLora = true;
+int retryMoveDetect = 0, didntMove = 0, loraReductor = 5;
 double lastLat = 48.85826, lastLng = 2.294516;
 
 
@@ -206,7 +209,7 @@ void setup() {
       dragJson = request->getParam("json")->value();
       //parse
       DynamicJsonDocument doc(2048);
-      DeserializationError error = deserializeJson(doc, file);
+      DeserializationError error = deserializeJson(doc, dragJson);
       if (error){
         Serial.println("Failed to deserialize json");
         request->send(200, "text/plain", "Failed to deserialize json");
@@ -227,9 +230,9 @@ void setup() {
         numOfSpeeds++;
       }
       doDrag = true;
-      request->redirect("/drag.html");
+      request->send(200, "text/plain", "Waiting for movement/forced command");
     } else if (opMode == 0) {
-      request->send(200, "text/plain", "not in drag mode");
+      request->send(200, "text/plain", "Not in drag mode");
     } else if (!gpsReady) {
       request->send(200, "text/plain", "GPS not ready: age("+String(gps.location.age())+"), fix("+String(gpsFix.value())+"), sats("+String(gps.satellites.value())+")");
     } else {
@@ -269,6 +272,17 @@ void setup() {
     char proccesed[2048];
     processDrag(true, proccesed, startTime, startLat, startLng);
     request->send(200, "text/plain", proccesed);
+  });
+  server.on("/lora", HTTP_GET, [](AsyncWebServerRequest *request){
+    if(request->hasParam("join")) {
+      if(loraStatus == 2) {
+        lmh_join();
+        request->redirect("/config.html");
+      } else {
+        request->send(200, "text/plain", "Lora is either joined already or not initialized!");
+      }
+    }
+    request->send(200, "text/plain", String(loraStatus));
   });
   server.on("/getfile", HTTP_GET, [](AsyncWebServerRequest *request){
     if(request->hasParam("rideid")) {
@@ -350,9 +364,10 @@ void loop()
     }
   }
 
-  if(gpsReady==true && routeActive==false && millis()>lastLora+60000){ //předělat na delší čas,
+  if(gpsReady==true && routeActive==false && (millis()>lastLora+1800000 || (firstLora && loraStatus == 1))){ //if not moving, send every 30mins
     Serial.println("sending data");
     sendPos("n");
+    firstLora = false;
     lastLora = millis();
   }
 
@@ -419,15 +434,17 @@ uint32_t getUnix(uint32_t year, uint32_t month, uint32_t day, uint32_t hour, uin
   return (((day-1+dm+((y+1)>>2)-((y+69)/100)+((y+369)/100/4)+365*(y-my))*24ul+hour)*60ul+minute)*60ul+second;
 }
 
-bool sendPos(String moving) { //rideid;moving;lat;lng;kmph;epoch - opravdu celý float?
+bool sendPos(String moving) { //rideid;moving;lat;lng;kmph;epoch
   String out = String(currentRideID)+";"+moving+";"+String(gps.location.lat(),5)+";"+String(gps.location.lng(),5)+";"+String(gps.speed.kmph())+";"+String(getUnix(gps.date.year(),gps.date.month(),gps.date.day(),gps.time.hour(),gps.time.minute(),gps.time.second()));
   Serial.println(out);
   fileOper(SD,"/"+String(currentRideID)+".data",out);
-  if(enaLora) { //&& loraReady
+  if(enaLora && loraStatus == 1 && loraReductor == 0) {
     send_lora_frame(out);
+    loraReductor = 5;
   } else { //gsm ready
     //GSM send
   }
+  loraReductor--;
 }
 
 void fileOper(fs::FS &fs, String path, String message) {
@@ -526,10 +543,10 @@ int dragTimer() {
     targetDistancesTime[x] = 0;
   }
 
-  processDrag(false, null, startTime, startLat, startLng);
+  processDrag(false, NULL, startTime, startLat, startLng);
 }
 
-void processDrag(bool web, char* out, unsigned long startTime, double startLat, double startLng) {
+void processDrag(bool web, char *out, unsigned long startTime, double startLat, double startLng) {
   DynamicJsonDocument doc(2048);
   DeserializationError error = deserializeJson(doc, dragJson);
   if (error){
@@ -568,7 +585,7 @@ void processDrag(bool web, char* out, unsigned long startTime, double startLat, 
   }
 
   if(web) {
-    serializeJson(doc, out);
+    serializeJson(doc, out, 2048);
   } else {
     File file = SD.open("/d"+String(currentDragID)+".data", FILE_WRITE);
     if(!file){
@@ -645,6 +662,7 @@ static void lorawan_join_failed_handler(void) {
   Serial.println("Check your EUI's and Keys's!");
   Serial.println("Check if a Gateway is in range!");
   digitalWrite(LORALED, LOW);
+  loraStatus = 2;
 }
 
 //LoRa function for handling HasJoined event.
@@ -657,14 +675,12 @@ static void lorawan_has_joined_handler(void) {
   #endif
   lmh_class_request(CLASS_A);
 
-  //lora ready (what about not ready? disconnected..)
   digitalWrite(LORALED, HIGH);
+  loraStatus = 1;
 }
 
 static void send_lora_frame(String toSend) {
-  if (lmh_join_status_get() != LMH_SET)
-  {
-  	//Not joined, try again later
+  if (lmh_join_status_get() != LMH_SET) { //Not joined, try again later
   	Serial.println("Did not join network, skip sending frame");
   	return;
   }
@@ -676,4 +692,42 @@ static void send_lora_frame(String toSend) {
 
   lmh_error_status error = lmh_send(&m_lora_app_data, LMH_UNCONFIRMED_MSG);
   Serial.printf("lmh_send result %d\n", error);
+}
+
+//Function for handling LoRaWan received data from Gateway
+static void lorawan_rx_handler(lmh_app_data_t *app_data) { //app_data - Pointer to rx data
+	Serial.printf("LoRa Packet received on port %d, size:%d, rssi:%d, snr:%d\n", app_data->port, app_data->buffsize, app_data->rssi, app_data->snr);
+	switch (app_data->port) {
+	case 3: // Port 3 switches the class
+		if (app_data->buffsize == 1) {
+			switch (app_data->buffer[0]) {
+  			case 0:
+  				lmh_class_request(CLASS_A);
+  				break;
+  			case 1:
+  				lmh_class_request(CLASS_B);
+  				break;
+  			case 2:
+  				lmh_class_request(CLASS_C);
+  				break;
+  			default:
+  				break;
+			}
+    }
+	  break;
+	case LORAWAN_APP_PORT:
+		// YOUR_JOB: Take action on received data
+		break;
+	default:
+		break;
+	}
+}
+
+static void lorawan_confirm_class_handler(DeviceClass_t Class) {
+	Serial.printf("switch to class %c done\n", "ABC"[Class]);
+
+	// Informs the server that switch has occurred ASAP
+	m_lora_app_data.buffsize = 0;
+	m_lora_app_data.port = LORAWAN_APP_PORT;
+	lmh_send(&m_lora_app_data, LMH_UNCONFIRMED_MSG);
 }
