@@ -1,8 +1,11 @@
 const express = require('express');
+const basicAuth = require('express-basic-auth')
 const socketio = require('socket.io');
 const http = require('http');
 const path = require('path');
 const fs = require("fs");
+const mqtt = require('mqtt');
+const dotenv = require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
@@ -10,30 +13,58 @@ const io = socketio(server);
 
 let pendingCalc = false;
 
+//----------MQTT----------
+let options = {
+    port: 1883,
+    clientId: 'mqttjs_' + Math.random().toString(16).substr(2, 8),
+    username: process.env.MQTT_USERNAME,
+    password: process.env.MQTT_PASSWORD,
+    keepalive: 60,
+    reconnectPeriod: 1000,
+    protocolId: 'MQIsdp',
+    protocolVersion: 3,
+    clean: true,
+    encoding: 'utf8'
+};
+let mqttclient = mqtt.connect('https://eu1.cloud.thethings.network',options);
+
+mqttclient.on('connect', function() {
+    console.log('Connected to TTN MQTT')
+    mqttclient.subscribe('#')
+});
+
+mqttclient.on('error', function(err) {
+    console.log(err);
+});
+
+mqttclient.on('message', function(topic, message) {
+    let parsedData = JSON.parse(message);
+    let decodedData = Buffer.from(parsedData.uplink_message.frm_payload, 'base64').toString();
+		console.log("Data from TTN: ", decodedData);
+		if(!parseData(decodedData))
+			console.log("Something is wrong m8 with the data trying do be parsed!");
+});
+
+//----------Express----------
+app.use(basicAuth({
+    users: { 'admin': process.env.ADMINPASS },
+		challenge: true
+}));
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-app.post('/uplink', function (req, res) {
-  let jsonParsed = JSON.parse(JSON.stringify(req.body));
-  let buf = Buffer.from(jsonParsed.uplink_message.frm_payload, 'base64');
-  let str = buf.toString('utf-8');
-  console.log(str);
-  parseData(str);
-  res.status(200).end()
-});
-
-app.get('/directuplink', (req, res) => {
-  if(!req.params.data || req.params.data == "")
-    return res.send("no param or empty");
-  parseData(req.query.data);
-  res.status(200).end()
-});
-
+//----------Funtions----------
 function parseData(input) {
-  const dataArray = input.split(";");
+	if((input.match(/;/g) || []).length != 5)
+		return false;
+  let dataArray = input.split(";"); //rideid;moving;lat;lng;kmph;epoch
+	if(isNaN(dataArray[0]) || dataArray[5] < 1582230000 || isNaN(dataArray[4]) || isNaN(dataArray[3]) || dataArray[3] < 1 || isNaN(dataArray[2]) || dataArray[2] < 1 || (dataArray[1].charAt(0) != "y" && dataArray[1].charAt(0) != "n") || dataArray[1].length != 1)
+		return false;
   let out = {rideId:dataArray[0],moving:dataArray[1],lat:parseFloat(dataArray[2]),lng:parseFloat(dataArray[3]),speed:parseFloat(dataArray[4]),epoch:dataArray[5]};
   io.emit("loraDecoded", out.moving, out.lat, out.lng, out.speed, out.epoch);
   saveUplink(out);
+	return true;
 }
 
 function search(array, insert, cb) {
@@ -55,8 +86,8 @@ function search(array, insert, cb) {
 }
 
 function saveUplink(data) {
-  let currentFileContent;
-  if (fs.existsSync("routes/"+String(data.rideId)+".json")) { //also check routes.json???
+  let currentFileContent = [];
+  if (fs.existsSync("routes/"+String(data.rideId)+".json")) {
   	currentFileContent = JSON.parse(fs.readFileSync("routes/"+String(data.rideId)+".json", 'utf8'));
   	let insert = {"moving":data.moving,"lat":data.lat,"lng":data.lng,"speed":data.speed,"epoch":data.epoch};
   	let index = search(currentFileContent, insert, function (a) { return a.epoch; });
@@ -68,14 +99,25 @@ function saveUplink(data) {
 			}
   	}
   } else { //create entry in db
+		let alreadyFound = false;
   	let dbData = JSON.parse(fs.readFileSync("routes.json", 'utf8'));
-    dbData.push({"id": data.rideId,"startEpoch": 0,"max": 0,"avg": 0,"total": 0});
+		for(let index = 0; index < dbData.length; index++) {
+			if(dbData[index].id == data.rideId) {
+				dbData[index].startEpoch = 0;
+				dbData[index].max = 0;
+				dbData[index].avg = 0;
+				dbData[index].total = 0;
+				alreadyFound = true;
+				break;
+			}
+		}
+		if(!alreadyFound)
+    	dbData.push({"id": data.rideId,"startEpoch": 0,"max": 0,"avg": 0,"total": 0});
     fs.writeFile("routes.json", JSON.stringify(dbData, null, 2), err => {
       if (err)
         console.log(`Data couldn't be saved! Error: ${err}`);
     });
-  	let newjson = [];
-    newjson.push({"moving":data.moving,"lat":data.lat,"lng":data.lng,"speed":data.speed,"epoch":data.epoch});
+    currentFileContent.push({"moving":data.moving,"lat":data.lat,"lng":data.lng,"speed":data.speed,"epoch":data.epoch});
   }
   fs.writeFile("routes/"+String(data.rideId)+".json", String(JSON.stringify(currentFileContent, null, 2)), err => {
     if (err)
@@ -128,6 +170,7 @@ function deg2rad(deg) {
   return deg * (Math.PI/180);
 }
 
+//----------Socket.io----------
 io.on('connection', (socket) => {
   socket.on('reCalc', rideId => { //signal to recalculate rides
     calcStuff(rideId);
@@ -136,7 +179,10 @@ io.on('connection', (socket) => {
 		if(data == "") {
 			io.emit('error', 'Empty upload');
 		} else {
-			parseData(data);
+			if(!parseData(data)) {
+				console.log("Something is wrong m8 with the data trying do be parsed!");
+				io.emit('error', "Something is wrong m8 with the data trying do be parsed!");
+			}
 		}
   });
   socket.on('getRoutes', function() { //signal to send routes from json file

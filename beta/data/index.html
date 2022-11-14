@@ -17,21 +17,58 @@
       background-color:#333743;
       color:white;
       text-align:center;
+      margin:0;
     }
     td {
       margin-left: 1%;
     }
+    header {
+      background-color: #484d59;
+      float:left;
+	    width:100%;
+	    position:relative;
+    }
+    ul {
+      list-style: none;
+    	float:right;
+    	position:relative;
+    	right:50%;
+    }
+    li {
+    	float:left;
+      position:relative;
+    	left:50%;
+    }
+    li a {
+      color: white;
+      padding: 14px 16px;
+      text-decoration: none;
+    }
+    li a:hover:not(.active) {
+      background-color: #333;
+    }
+    .active {
+      background-color: #04AA6D;
+    }
   </style>
-
   <body>
-    <a href='/'>ROUTE</a> / <a href='/drag.html'>DRAG</a> / <a href='/config.html'>SETTINGS</a><br><hr>
-    <p>Pokud nemáte připojení k internetu, můžete soubor stáhnout a manuálně ho nahrát na server pro zobrazení.</p>
-    <p>Pokud naopak máte připojení k internetu a vaše zařízení je schopné využít dva druhy připojení, můžete využít interaktivní mapu.</p>
-    <a href="./map.html">ZDE</a><br><hr>
-    <table style="margin-left: auto;margin-right: auto;">
-      <tbody id="tablebody">
-      </tbody>
-    </table>
+    <header>
+      <ul>
+        <li><a href='./' class="active">Route</a></li>
+        <li><a href='./drag.html'>Drag</a></li>
+        <li><a href='./config.html'>Settings</a></li>
+      </ul>
+    </header>
+    <main>
+      <hr>
+      <p>Pokud nemáte připojení k internetu, můžete soubor stáhnout a manuálně ho nahrát na server pro zobrazení.</p>
+      <p>Pokud naopak máte připojení k internetu a vaše zařízení je schopné využít dva druhy připojení, můžete využít interaktivní mapu.</p>
+      <a href="./map.html">ZDE</a><br><hr>
+      <table style="margin-left: auto;margin-right: auto;">
+        <tbody id="tablebody">
+        </tbody>
+      </table>
+    <main>
   </body>
 </html>
 

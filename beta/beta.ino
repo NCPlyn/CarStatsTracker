@@ -10,9 +10,7 @@
 #include <ArduinoJson.h>
 #include <LoRaWan-Arduino.h>
 #define CONFIG_LITTLEFS_SPIFFS_COMPAT 1
-#define CONFIG_LITTLEFS_CACHE_SIZE 256
-#define SPIFFS LITTLEFS
-#include <LITTLEFS.h>
+#include <LittleFS.h>
 #include "loraCreds.h"
 #include "FS.h"
 #include "SD.h"
@@ -25,7 +23,7 @@
 #define SPI_MISO 27
 #define SPI_MOSI 13
 SPIClass SPISD(HSPI);
-//Also to properly work, add "VSPI" to the () in 'SX126x-Arduino\src\boards\mcu\spi_board.cpp' on line 5
+//Also to properly work, add "VSPI" to the () in 'SX126x-Arduino\src\boards\mcu\espressif\spi_board.cpp' on line 5
 
 //------------------LORA------------------//
 #define LORAWAN_APP_DATA_BUFF_SIZE 50 // Size of the data to be transmitted
@@ -36,7 +34,7 @@ static void lorawan_has_joined_handler(void);
 static void lorawan_join_failed_handler(void);
 static void lorawan_rx_handler(lmh_app_data_t *app_data); //předdefinové, nepoužité
 static void lorawan_confirm_class_handler(DeviceClass_t Class); //--||--
-static void send_lora_frame(void);
+static void send_lora_frame(String toSend);
 static uint8_t m_lora_app_data_buffer[LORAWAN_APP_DATA_BUFF_SIZE]; // Lora user application data buffer.
 static lmh_app_data_t m_lora_app_data = {m_lora_app_data_buffer, 0, 0, 0, 0}; // Lora user application data structure.
 static lmh_param_t lora_param_init = {LORAWAN_ADR_ON, DR_3, LORAWAN_PUBLIC_NETWORK, JOINREQ_NBTRIALS, LORAWAN_DEFAULT_TX_POWER, LORAWAN_DUTYCYCLE_OFF}; //Structure containing LoRaWan parameters, needed for lmh_init()
@@ -91,21 +89,28 @@ double targetDistancesTime[30];
 
 bool dragging = false, doDrag = false;
 double startLat = 0, startLng = 0;
-unsigned long startTime = 0;
+unsigned long startTime = 0, startTimeGPS = 0;
 
 String dragJson;
 
 //------Normal------
 unsigned long detectMoveMillis = millis(), lastLora = millis();
 bool detectMove = true, moveDetected = false, routeActive = false, gpsReady = false, firstLora = true;
-int retryMoveDetect = 0, didntMove = 0, loraReductor = 5;
+int retryMoveDetect = 0, didntMove = 0, loraReductor = 0;
 double lastLat = 48.85826, lastLng = 2.294516;
 
+//------Forward Declare------
+void sendPos(String moving);
+void calibrateAcc();
+void modeSwitch(int opm);
+void processDrag(bool web, char *out, unsigned long startTime, double startLat, double startLng);
+void dragTimer();
+void LoraSetup();
 
 bool loadSPIFFS() {
   DynamicJsonDocument doc(512);
 
-  File file = SPIFFS.open("/config.json", "r");
+  File file = LittleFS.open("/config.json", "r");
   if (!file) {
     Serial.println("There was an error opening the config file!");
     file.close();
@@ -131,7 +136,7 @@ bool loadSPIFFS() {
 bool saveSPIFFS() {
   DynamicJsonDocument doc(512);
 
-  File file = SPIFFS.open("/config.json", "w");
+  File file = LittleFS.open("/config.json", "w");
   if (!file) {
     Serial.println("There was an error opening the config file!");
     file.close();
@@ -159,8 +164,8 @@ void setup() {
   delay(1000);
   Serial.println("Processor came out of reset.\n");
 
-  if (!SPIFFS.begin(true)) {
-    Serial.println("An Error has occurred while mounting SPIFFS");
+  if (!LittleFS.begin(true)) {
+    Serial.println("An Error has occurred while mounting LittleFS");
   }
 
   for(int x = 0;x<numOfSpeeds;x++) {
@@ -189,12 +194,12 @@ void setup() {
   WiFi.softAP(ssid, password);
   Serial.println(WiFi.softAPIP());
 
-  server.serveStatic("/", LITTLEFS, "/").setDefaultFile("index.html");
+  server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
 
   server.on("/opmode", HTTP_GET, [](AsyncWebServerRequest *request){
     if(request->hasParam("val")) {
-      modeSwitch(request->getParam("rideid")->value().toInt());
-      if(request->getParam("rideid")->value() == 0) {
+      modeSwitch(request->getParam("val")->value().toInt());
+      if(request->getParam("val")->value() == 0) {
         request->redirect("/");
       } else {
         request->redirect("/drag.html");
@@ -202,11 +207,11 @@ void setup() {
     }
     request->send(200, "text/plain", "No param 'val'");
   });
-  server.on("/doDrag", HTTP_GET, [](AsyncWebServerRequest *request){
-    if(opMode == 1 && gpsReady && !doDrag) {
+  server.on("/doDrag", HTTP_POST, [](AsyncWebServerRequest *request){
+    if(opMode == 1 && gpsReady && !doDrag && request->hasParam("json", true)) {
       calibrateAcc();
       //get json and put it in global string
-      dragJson = request->getParam("json")->value();
+      dragJson = request->getParam("json", true)->value();
       //parse
       DynamicJsonDocument doc(2048);
       DeserializationError error = deserializeJson(doc, dragJson);
@@ -220,6 +225,7 @@ void setup() {
       JsonArray distanceArray = doc["dist"];
       for (JsonObject t : distanceArray) {
         targetDistances[numOfDistances] = t["targ"].as<int>();
+        //Serial.println(targetDistances[numOfDistances]);
         numOfDistances++;
       }
       //do same for distance
@@ -227,9 +233,11 @@ void setup() {
       JsonArray speedArray = doc["speed"];
       for (JsonObject t : speedArray) {
         targetSpeeds[numOfSpeeds] = t["targ"].as<int>();
+        //Serial.println(targetSpeeds[numOfSpeeds]);
         numOfSpeeds++;
       }
       doDrag = true;
+      Serial.println(doDrag); //musí se to přečíst nebo delay nebo co??
       request->send(200, "text/plain", "Waiting for movement/forced command");
     } else if (opMode == 0) {
       request->send(200, "text/plain", "Not in drag mode");
@@ -364,10 +372,14 @@ void loop()
     }
   }
 
-  if(gpsReady==true && routeActive==false && (millis()>lastLora+1800000 || (firstLora && loraStatus == 1))){ //if not moving, send every 30mins
-    Serial.println("sending data");
+  if(gpsReady==true && routeActive==false && (millis()>lastLora+60000 || (firstLora && loraStatus == 1))){ //if not moving, send every 30mins
+    Serial.println("sending not move data");
+    if(firstLora && loraStatus == 1) {
+      firstLora = false;
+      loraReductor = 0;
+      delay(200);
+    }
     sendPos("n");
-    firstLora = false;
     lastLora = millis();
   }
 
@@ -426,26 +438,7 @@ void loop()
   }
 }
 
-uint32_t getUnix(uint32_t year, uint32_t month, uint32_t day, uint32_t hour, uint32_t minute, uint32_t second) {
-  int8_t my = (month >= 3) ? 1 : 0;
-  uint16_t y = year + my - 1970;
-  uint16_t dm = 0;
-  for (int i = 0; i < month - 1; i++) dm += (i<7)?((i==1)?28:((i&1)?30:31)):((i&1)?31:30);
-  return (((day-1+dm+((y+1)>>2)-((y+69)/100)+((y+369)/100/4)+365*(y-my))*24ul+hour)*60ul+minute)*60ul+second;
-}
-
-bool sendPos(String moving) { //rideid;moving;lat;lng;kmph;epoch
-  String out = String(currentRideID)+";"+moving+";"+String(gps.location.lat(),5)+";"+String(gps.location.lng(),5)+";"+String(gps.speed.kmph())+";"+String(getUnix(gps.date.year(),gps.date.month(),gps.date.day(),gps.time.hour(),gps.time.minute(),gps.time.second()));
-  Serial.println(out);
-  fileOper(SD,"/"+String(currentRideID)+".data",out);
-  if(enaLora && loraStatus == 1 && loraReductor == 0) {
-    send_lora_frame(out);
-    loraReductor = 5;
-  } else { //gsm ready
-    //GSM send
-  }
-  loraReductor--;
-}
+//----------Functions----------
 
 void fileOper(fs::FS &fs, String path, String message) {
   String msg;
@@ -469,18 +462,25 @@ void fileOper(fs::FS &fs, String path, String message) {
   file.close();
 }
 
-void modeSwitch(int opm) {
-  if(opMode == 0 && opm == 1) {
-    routeActive = false;
-    detectMove = true;
-    didntMove = 0;
-    opMode = 1;
-  } else if (opMode == 1 && opm == 0) {
-    doDrag = false;
-    dragging = false;
-    opMode = 0;
+uint32_t getUnix(uint32_t year, uint32_t month, uint32_t day, uint32_t hour, uint32_t minute, uint32_t second) {
+  int8_t my = (month >= 3) ? 1 : 0;
+  uint16_t y = year + my - 1970;
+  uint16_t dm = 0;
+  for (int i = 0; i < month - 1; i++) dm += (i<7)?((i==1)?28:((i&1)?30:31)):((i&1)?31:30);
+  return (((day-1+dm+((y+1)>>2)-((y+69)/100)+((y+369)/100/4)+365*(y-my))*24ul+hour)*60ul+minute)*60ul+second;
+}
+
+void sendPos(String moving) { //rideid;moving;lat;lng;kmph;epoch
+  String out = String(currentRideID)+";"+moving+";"+String(gps.location.lat(),5)+";"+String(gps.location.lng(),5)+";"+String(gps.speed.kmph())+";"+String(getUnix(gps.date.year(),gps.date.month(),gps.date.day(),gps.time.hour(),gps.time.minute(),gps.time.second()));
+  Serial.println(out);
+  fileOper(SD,"/"+String(currentRideID)+".data",out);
+  if(enaLora && loraStatus == 1 && loraReductor == 0) {
+    send_lora_frame(out);
+    loraReductor = 5;
+  } else { //gsm ready
+    //GSM send
   }
-  calibrateAcc();
+  loraReductor--;
 }
 
 void calibrateAcc() {
@@ -497,53 +497,18 @@ void calibrateAcc() {
   Serial.println("Calibration done");
 }
 
-int dragTimer() {
-  startLat = gps.location.lat();
-  startLng = gps.location.lng();
-  startTime = millis();
-  double currentSpeed = 0, currentDistance = 0;
-  Serial.println("Drag started");
-  dragging = true;
-
-  while(digitalRead(0) == HIGH && targetSpeedsTime[numOfSpeeds-1] == 0 && targetDistancesTime[numOfDistances-1] == 0 && dragging) {
-
-    while (Serial2.available() > 0) {
-      gps.encode(Serial2.read());
-    }
-
-    currentSpeed = gps.speed.kmph();
-    currentDistance = TinyGPSPlus::distanceBetween(gps.location.lat(),gps.location.lng(),startLat,startLng);
-
-    for(int x = 0;x<numOfSpeeds;x++){
-      if(targetSpeedsTime[x] == 0) {
-        if(currentSpeed > targetSpeeds[x]) {
-          targetSpeedsTime[x] = double(millis()-startTime-gps.location.age())/1000;
-          targetSpeedsDist[x] = currentDistance;
-        }
-      }
-    }
-    for(int x = 0;x<numOfDistances;x++){
-      if(targetDistancesTime[x] == 0) {
-        if(currentDistance > targetDistances[x]) {
-          targetDistancesTime[x] = double(millis()-startTime-gps.location.age())/1000;
-        }
-      }
-    }
+void modeSwitch(int opm) {
+  if(opMode == 0 && opm == 1) {
+    routeActive = false;
+    detectMove = true;
+    didntMove = 0;
+    opMode = 1;
+  } else if (opMode == 1 && opm == 0) {
+    doDrag = false;
+    dragging = false;
+    opMode = 0;
+    calibrateAcc();
   }
-
-  Serial.println("Drag ended");
-  dragging = false;
-
-  for(int x = 0;x<numOfSpeeds;x++){
-    Serial.printf("%d kmh/h in %f sec\n", targetSpeeds[x], targetSpeedsTime[x]);
-    targetSpeedsTime[x] = 0;
-  }
-  for(int x = 0;x<numOfDistances;x++){
-    Serial.printf("%d m in %f sec\n", targetDistances[x], targetDistancesTime[x]);
-    targetDistancesTime[x] = 0;
-  }
-
-  processDrag(false, NULL, startTime, startLat, startLng);
 }
 
 void processDrag(bool web, char *out, unsigned long startTime, double startLat, double startLng) {
@@ -597,6 +562,56 @@ void processDrag(bool web, char *out, unsigned long startTime, double startLat, 
     currentDragID++;
     saveSPIFFS();
   }
+}
+
+void dragTimer() {
+  startLat = gps.location.lat();
+  startLng = gps.location.lng();
+  startTime = millis();
+  startTimeGPS = getUnix(gps.date.year(),gps.date.month(),gps.date.day(),gps.time.hour(),gps.time.minute(),gps.time.second());
+  double currentSpeed = 0, currentDistance = 0;
+  Serial.println("Drag started");
+  dragging = true;
+
+  while(digitalRead(0) == HIGH && targetSpeedsTime[numOfSpeeds-1] == 0 && targetDistancesTime[numOfDistances-1] == 0 && dragging) {
+
+    while (Serial2.available() > 0) {
+      gps.encode(Serial2.read());
+    }
+
+    currentSpeed = gps.speed.kmph();
+    currentDistance = TinyGPSPlus::distanceBetween(gps.location.lat(),gps.location.lng(),startLat,startLng);
+
+    for(int x = 0;x<numOfSpeeds;x++){
+      if(targetSpeedsTime[x] == 0) {
+        if(currentSpeed > targetSpeeds[x]) {
+          targetSpeedsTime[x] = double(millis()-startTime-gps.location.age())/1000;
+          targetSpeedsDist[x] = currentDistance;
+        }
+      }
+    }
+    for(int x = 0;x<numOfDistances;x++){
+      if(targetDistancesTime[x] == 0) {
+        if(currentDistance > targetDistances[x]) {
+          targetDistancesTime[x] = double(millis()-startTime-gps.location.age())/1000;
+        }
+      }
+    }
+  }
+
+  Serial.println("Drag ended");
+  dragging = false;
+
+  for(int x = 0;x<numOfSpeeds;x++){
+    Serial.printf("%d kmh/h in %f sec\n", targetSpeeds[x], targetSpeedsTime[x]);
+    targetSpeedsTime[x] = 0;
+  }
+  for(int x = 0;x<numOfDistances;x++){
+    Serial.printf("%d m in %f sec\n", targetDistances[x], targetDistancesTime[x]);
+    targetDistancesTime[x] = 0;
+  }
+
+  processDrag(false, NULL, startTimeGPS, startLat, startLng);
 }
 
 void LoraSetup() {

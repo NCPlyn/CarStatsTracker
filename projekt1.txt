@@ -41,24 +41,23 @@ rideId,moving(y/n),lat,lng,kmph,epochTime
 
 ----------------------------------------------
 esp:
-web (CSS - navbar,tables,drag,settings,přepínaní)
-wifi - celé udělat (connect to station if can, send data)
+web - wificreds, přepínaní??
+wifi - save wifi in config (wifi name & pass), once in time try to connect and sent unsent data
 GSM - celé udělat (send pos data & drag)
+240
 
 server:
-podpora drag (zobrazení & uložení)
-parseData() - validiter
+podpora ukládání celých souborů s klíčem
+podpora drag (zobrazení)
+
 
 1. odzkoušet vše zatím
-lora - přejít na Helium? - /lora get status and join????????test
-ride: sd-1min lora-5min?????????test
-firstLora is gonna make it?????test
-drag - saves on sd?????? returns right data?????? web works????? load drags????
+drag - test irl
 
-2. opravit chyby a pokusit se najít ostatní a opravit
-3. mqtt
+3. opravit chyby a pokusit se najít ostatní a opravit
 4. pcb & obal
-5. wifi sta - nějaká funkce na připojení?
+
+lora - přejít na Helium?
 
 ----------------------------------------------
 WEB:

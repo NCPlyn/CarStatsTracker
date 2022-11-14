@@ -6,53 +6,120 @@
     <title>CarStatsTracker</title>
   </head>
   <style>
-    a,a:link,a:visited {
-      color:white;
-    }
     body {
       font-family:Verdana;
       text-align:center;
       background-color:#333743;
       color:white;
+      margin:0;
     }
-
-    table, td, th {
-      border-color: white;
+    table {
+      margin-left: auto;
+      margin-right: auto;
       border: 1px solid;
       border-collapse: collapse;
-      table-layout: fixed;
-      min-width: 500px;
-      width: 5vw;
       text-align: center;
     }
-
+    td, th {
+      border-color: white;
+      border: 1px solid;
+    }
+    .th_from_to {
+      min-width:50px;
+    }
+    .th_time_dist {
+      min-width:95px;
+    }
+    input {
+      margin-top:7px;
+      background-color:#21252B;
+      color:white;
+      border:3px solid #3f444d;
+      border-radius:4px;
+      padding: 5px 8px;
+    }
+    .btn {
+    	background-color:#24282b;
+      border:2px solid #3B4048;
+      border-radius:12px;
+    	color:#f5f5f5;
+      line-height: 1.5;
+    	padding: 0.375rem 0.75rem;
+      font-size: 1rem;
+      transition: color .15s ease-in-out,background-color .15s ease-in-out,border-color .15s ease-in-out,box-shadow .15s ease-in-out;
+    }
+    .btn:hover {
+    	background-color:#474a4d;
+    }
+    .btn:active {
+    	position:relative;
+    	top:1px;
+    }
+    .bigbtn {
+      font-size: 1.5rem;
+    }
+    header {
+      background-color: #484d59;
+      float:left;
+	    width:100%;
+	    position:relative;
+    }
+    ul {
+      list-style: none;
+    	float:right;
+    	position:relative;
+    	right:50%;
+    }
+    li {
+    	float:left;
+      position:relative;
+    	left:50%;
+    }
+    li a {
+      color: white;
+      padding: 14px 16px;
+      text-decoration: none;
+    }
+    li a:hover:not(.active) {
+      background-color: #333;
+    }
+    .active {
+      background-color: #04AA6D;
+    }
   </style>
   <body>
-    <a href='/'>ROUTE</a> / <a href='/drag.html'>DRAG</a> / <a href='/config.html'>SETTINGS</a><br><hr>
-    <h1>DRAG</h1>
-    <button onclick="doDrag()" type="button">DO-DRAG</button><br>
-    <p id="dodragstat"></p>
-    <button onclick="location.href='./forceDragStart'" type="button">forceStart</button> <button onclick="location.href='./forceDragStop'" type="button">forceStop</button><br>
-    <h2 id="speed">0 km/h</h2>
+    <header>
+      <ul>
+        <li><a href='./'>Route</a></li>
+        <li><a href='./drag.html' class="active">Drag</a></li>
+        <li><a href='./config.html'>Settings</a></li>
+      </ul>
+    </header>
+    <hr><br>
+    <button onclick="doDrag()" class="btn bigbtn">DO-DRAG</button><br>
+    <button onclick="location.href='./forceDragStart'" class="btn">forceStart</button>
+    <button onclick="location.href='./forceDragStop'" class="btn">forceStop</button><br>
+    <p id="dodragstat">Drag status</p>
+    <h2 id="speed" onclick="getSpeed();">0 km/h</h2>
     <hr>
     <div>
       <h2>Speed</h2>
       <form>
         <label for="Sfrom">From: </label>
-        <input type="number" name="Sfrom" id="Sfrom" min="0" max="300" placeholder="0"><br>
+        <input type="number" name="Sfrom" id="Sfrom" min="0" max="300" placeholder="0">
         <label for="Sto">To: </label>
         <input type="number" name="Sto" id="Sto" min="0" max="300" placeholder="100"><br>
         <br>
         <button type="button" onclick="addTableSpeed()">Add speed</button>
       </form>
-      <table style="margin-left: auto;margin-right: auto;" id="TS">
+      <table id="TS">
         <thead>
           <tr>
-            <th>From</th>
-            <th>To</th>
-            <th>Time</th>
-            <th>Distance</th>
-            <th>Remove?</th>
+            <th class="th_from_to">From</th>
+            <th class="th_from_to">To</th>
+            <th class="th_time_dist">Time</th>
+            <th class="th_time_dist">Distance</th>
+            <th>Del</th>
           </tr>
         </thead>
         <tbody id="TSbody">
@@ -61,7 +128,7 @@
             <td>50</td>
             <td></td>
             <td></td>
-            <td><button onclick="document.getElementById('TS').deleteRow(1);">Remove</button></td>
+            <td><button onclick="document.getElementById('TS').deleteRow(1);">X</button></td>
           </tr>
         </tbody>
       </table>
@@ -71,19 +138,19 @@
       <h2>Distance</h2>
       <form>
         <label for="Dfrom">From: </label>
-        <input type="number" name="Dfrom" id="Dfrom" min="0" max="3000" placeholder="0"><br>
+        <input type="number" name="Dfrom" id="Dfrom" min="0" max="3000" placeholder="0">
         <label for="Dto">To: </label>
         <input type="number" name="Dto" id="Dto" min="0" max="3000" placeholder="100"><br>
         <br>
         <button type="button" onclick="addTableDist()">Add distance</button>
       </form>
-      <table style="margin-left: auto;margin-right: auto;" id="TD">
+      <table id="TD">
         <thead>
           <tr>
-            <th>From</th>
-            <th>To</th>
-            <th>Time</th>
-            <th>Remove?</th>
+            <th class="th_from_to">From</th>
+            <th class="th_from_to">To</th>
+            <th class="th_time_dist">Time</th>
+            <th>Del</th>
           </tr>
         </thead>
         <tbody id="TDbody">
@@ -91,7 +158,7 @@
             <td>0</td>
             <td>100</td>
             <td></td>
-            <td><button onclick="document.getElementById('TD').deleteRow(1);">Remove</button></td>
+            <td><button onclick="document.getElementById('TD').deleteRow(1);">X</button></td>
           </tr>
         </tbody>
       </table>
@@ -110,7 +177,7 @@
   function addTableSpeed() {
     if(Number(document.getElementById("Sfrom").value) < Number(document.getElementById("Sto").value)) {
       var oRows = document.getElementById("TS").getElementsByTagName('td');
-      document.getElementById("TSbody").innerHTML += "<tr><td>"+document.getElementById("Sfrom").value+"</td><td>"+document.getElementById("Sto").value+"</td><td></td><td></td><td><button onclick=\"document.getElementById('TS').deleteRow("+(oRows.length+1)+");\">Remove</button></td></tr>";
+      document.getElementById("TSbody").innerHTML += "<tr><td>"+document.getElementById("Sfrom").value+"</td><td>"+document.getElementById("Sto").value+"</td><td></td><td></td><td><button onclick=\"document.getElementById('TS').deleteRow("+(oRows.length+1)+");\">X</button></td></tr>";
     } else {
       alert("Speed 'from' cannot be bigger that speed 'to'");
     }
@@ -118,7 +185,7 @@
   function addTableDist() {
     if(Number(document.getElementById("Dfrom").value) < Number(document.getElementById("Dto").value)) {
       var oRows = document.getElementById("TD").getElementsByTagName('td');
-      document.getElementById("TDbody").innerHTML += "<tr><td>"+document.getElementById("Dfrom").value+"</td><td>"+document.getElementById("Dto").value+"</td><td></td><td><button onclick=\"document.getElementById('TD').deleteRow("+(oRows.length+1)+");\">Remove</button></td></tr>";
+      document.getElementById("TDbody").innerHTML += "<tr><td>"+document.getElementById("Dfrom").value+"</td><td>"+document.getElementById("Dto").value+"</td><td></td><td><button onclick=\"document.getElementById('TD').deleteRow("+(oRows.length+1)+");\">X</button></td></tr>";
     } else {
       alert("Distance 'from' cannot be bigger that distance 'to'");
     }
@@ -184,8 +251,6 @@
       }
     }
 
-    console.log(JSON.stringify(obj));
-
     xmlhttp=new XMLHttpRequest();
     xmlhttp.onreadystatechange=function()
     {
@@ -193,7 +258,7 @@
       {
         let inString = xmlhttp.responseText;
         document.getElementById("dodragstat").innerHTML = inString;
-        if(inString.charAt(1) == "W") {
+        if(inString.charAt(0) == "W") {
           dataInt = setInterval(function () {
             getSpeed();
             getData();
@@ -201,28 +266,29 @@
         }
       }
     }
-    xmlhttp.open("GET", "/doDrag&"+JSON.stringify(obj), false );
-    xmlhttp.send();
+    xmlhttp.open("POST", "/doDrag", false);
+    xmlhttp.send("json="+JSON.stringify(obj));
   }
 
   function getSpeed() {
-    xmlhttp=new XMLHttpRequest();
-    xmlhttp.onreadystatechange=function()
+    xmlhttpSpeed = new XMLHttpRequest();
+    xmlhttpSpeed.onreadystatechange=function()
     {
-      if (xmlhttp.readyState==4 && xmlhttp.status==200)
+      if (xmlhttpSpeed.readyState==4 && xmlhttpSpeed.status==200)
       {
-        document.getElementById("speed").innerHTML = xmlhttp.responseText;
+        document.getElementById("speed").innerHTML = xmlhttpSpeed.responseText;
       }
     }
-    xmlhttp.open("GET", "/getSpeed", true );
-    xmlhttp.send();
+    xmlhttpSpeed.open("GET", "/getSpeed", true);
+    xmlhttpSpeed.send();
   }
   getSpeed();
-  setInterval(function () {getSpeed();}, 10000);
+  //setInterval(function () {getSpeed();}, 10000);
 
   function fillData(jsontoparse) {
     document.getElementById("TSbody").innerHTML = "";
     document.getElementById("TDbody").innerHTML = "";
+    console.log(jsontoparse);
     let obj = JSON.parse(jsontoparse);
     if(obj.ended == true && dataInt != null) {
       clearInterval(dataInt);
@@ -271,15 +337,14 @@
   }
 
   function getData() { //{"speed":[{"targ":50,"from":[0], time: 1655468, dist: 150}],"dist":[{"targ":100,"from":[0], time: 1655468}]}
-    xmlhttp=new XMLHttpRequest();
-    xmlhttp.onreadystatechange=function() {
-      if (xmlhttp.readyState==4 && xmlhttp.status==200) {
-        console.log(xmlhttp.responseText);
-        fillData(xmlhttp.responseText);
+    xmlhttpData = new XMLHttpRequest();
+    xmlhttpData.onreadystatechange=function() {
+      if (xmlhttpData.readyState==4 && xmlhttpData.status==200) {
+        fillData(xmlhttpData.responseText);
       }
     }
-    xmlhttp.open("GET", "/getProcDrag", true );
-    xmlhttp.send();
+    xmlhttpData.open("GET", "/getProcDrag", true );
+    xmlhttpData.send();
   }
 
   function loadFile(id) {
@@ -300,10 +365,10 @@
   			var partsArray = xmlhttp.responseText.split(';');
   			partsArray.pop();
   			for (var i = 0; i < partsArray.length; i++) {
-          if(partsArray[i].includes("d")) {
-            var n = partsArray[i].indexOf('.');
-            var s = partsArray[i].substring(1, n != -1 ? n : partsArray[i].length);
-            document.getElementById("tablebody").innerHTML += "<th>" + s + "</th><td><button onclick=\"loadFile("+s+")\" type=\"button\">Load</button></td></tr>";
+          var n = partsArray[i].indexOf('.');
+          var s = partsArray[i].substring(1, n != -1 ? n : partsArray[i].length);
+          if(s.includes("d")) {
+            document.getElementById("tablebody").innerHTML += "<th>" + s + "</th><td><button onclick=\"loadFile(\'"+s+"\')\" type=\"button\">Load</button></td></tr>";
           }
   			}
   		}

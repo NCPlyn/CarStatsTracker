@@ -16,7 +16,10 @@
   "license": "MIT",
   "dependencies": {
     "body-parser": "^1.10.1",
+    "dotenv": "^16.0.3",
     "express": "^4.10.7",
+    "express-basic-auth": "^1.2.1",
+    "mqtt": "^4.3.7",
     "socket.io": "^4.5.2"
   }
 }
