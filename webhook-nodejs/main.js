@@ -1,20 +1,28 @@
 const express = require('express');
 const basicAuth = require('express-basic-auth')
 const socketio = require('socket.io');
+const https = require('https');
 const http = require('http');
 const path = require('path');
 const fs = require("fs");
 const mqtt = require('mqtt');
 const dotenv = require('dotenv').config();
 
+let httpsoptions = {
+  key: fs.readFileSync('privatekey.pem'),
+  cert: fs.readFileSync('certificate.pem')
+};
+
 const app = express();
 const server = http.createServer(app);
 const io = socketio(server);
+const serverhttps = https.createServer(httpsoptions, app);
+const sio = socketio(serverhttps);
 
 let pendingCalc = false;
 
 //----------MQTT----------
-let options = {
+let mqttoptions = {
     port: 1883,
     clientId: 'mqttjs_' + Math.random().toString(16).substr(2, 8),
     username: process.env.MQTT_USERNAME,
@@ -26,7 +34,7 @@ let options = {
     clean: true,
     encoding: 'utf8'
 };
-let mqttclient = mqtt.connect('https://eu1.cloud.thethings.network',options);
+let mqttclient = mqtt.connect('https://eu1.cloud.thethings.network',mqttoptions);
 
 mqttclient.on('connect', function() {
     console.log('Connected to TTN MQTT')
@@ -53,6 +61,16 @@ app.use(basicAuth({
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
+app.use(express.text());
+
+app.post('/uplink', function (req, res) {
+	console.log(req.body);
+	if(parseData(req.body)){
+		res.status(200).end()
+	} else {
+		res.status(422).end()
+	}
+});
 
 //----------Funtions----------
 function parseData(input) {
@@ -171,7 +189,14 @@ function deg2rad(deg) {
 }
 
 //----------Socket.io----------
-io.on('connection', (socket) => {
+io.on("connection", (socket) => {
+    ServersReceived(socket);
+});
+sio.on("connection", (socket) => {
+    ServersReceived(socket);
+});
+
+function ServersReceived(socket) {
   socket.on('reCalc', rideId => { //signal to recalculate rides
     calcStuff(rideId);
   });
@@ -203,14 +228,17 @@ io.on('connection', (socket) => {
       socket.emit('error', "No ride file with ID:"+routeId+" found on server!");
     }
   });
-});
+};
 
+//----------Server stuff----------
 process.on('uncaughtException', function(err) {
   io.emit('error', 'Caught exception: ' + err.stack);
   console.error(err.stack || err);
 });
 
-const PORT = process.env.PORT || 80;
-server.listen(PORT, function() {
-  console.log(`Server listening on port ${PORT}`);
+server.listen(80, function() {
+  console.log(`HTTP server listening on port 80`);
+});
+serverhttps.listen(443, function() {
+  console.log(`HTTPS server listening on port 433`);
 });

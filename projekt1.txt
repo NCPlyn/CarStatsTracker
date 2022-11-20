@@ -37,27 +37,26 @@ WIFI:
 https://randomnerdtutorials.com/esp32-esp-now-wi-fi-web-server/ (něco jako socketio xd)
 https://eu1.cloud.thethings.network/console/applications/carstatstracker/data
 
+openssl req -newkey rsa:2048 -x509 -nodes -keyout privatekey.pam -new -out certificate.pem -subj /CN=example.com -reqexts SAN -extensions SAN -config config.txt -sha256 -days 3650
+
 rideId,moving(y/n),lat,lng,kmph,epochTime
 
 ----------------------------------------------
-esp:
-web - wificreds, přepínaní??
-wifi - save wifi in config (wifi name & pass), once in time try to connect and sent unsent data
-GSM - celé udělat (send pos data & drag)
-240
-
-server:
-podpora ukládání celých souborů s klíčem
-podpora drag (zobrazení)
-
+260???
+GSM - celé na esp
+drag - server(upload+view) & esp(upload)
 
 1. odzkoušet vše zatím
 drag - test irl
-
-3. opravit chyby a pokusit se najít ostatní a opravit
-4. pcb & obal
+2. opravit chyby a pokusit se najít ostatní a opravit
+3. box
 
 lora - přejít na Helium?
+bacha hesla v config a basicauth
+
+módy:
+-LoRa/WiFi https://techtutorialsx.com/2017/11/18/esp32-arduino-https-get-request/
+-GSM - Arduino-SIM800L-driver nebo TinyGSM
 
 ----------------------------------------------
 WEB:
@@ -71,6 +70,7 @@ WEB:
 /getSpeed - GET - Returns current speed
 /getProcDrag - GET - Returns JSON with current state of dragy
 /lora - GET - Returns loraStatus, if sent with "join" param, tries to join LoraWAN.
+/wifi - GET - Returns WiFi.status(), if sent with "join" param, tries to join WiFi STA.
 /getfile - GET - Returns content of file from SDCard
   rideid: which rideid/dragid we want
 /getfiles - GET - Returns all of the files on the SDCard root seperated by ;

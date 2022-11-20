@@ -98,11 +98,26 @@
         <input type="checkbox" id="enaLora"><br>
         <hr><h3>Misc. stuff</h3><hr>
         <label for="currentRideID">currentRideID: </label>
-        <input type="number" name="currentRideID" min="0" max="1000"><br>
+        <input type="number" name="currentRideID"><br>
         <label for="currentDragID">currentDragID: </label>
-        <input type="number" name="currentDragID" min="0" max="1000"><br>
+        <input type="number" name="currentDragID"><br>
+        <label for="lastUploaded">lastUploaded: </label>
+        <input type="number" name="lastUploaded"><br>
         <label for="detectVal">detectVal (default:0.4): </label>
         <input type="number" name="detectVal" min="0" max="10"><br><br>
+        <hr><h3>WiFi stuff</h3><hr>
+        WiFi Status: <b id="wifistatus">---------</b><br>
+        <button onclick="window.location = './wifi?join'" class="btn">WiFi connect</button><br>
+        <label for="apName">AP Name: </label>
+        <input type="text" name="apName"><br>
+        <label for="apPass">AP Pass: </label>
+        <input type="text" name="apPass"><br>
+        <label for="apName">STA Name: </label>
+        <input type="text" name="staName"><br>
+        <label for="apPass">STA Pass: </label>
+        <input type="text" name="staPass"><br>
+        <label for="webAddress">POST WebAddress: </label>
+        <input type="text" name="webAddress"><br><br>
         <button type="button" onclick="saveConfig()" class="btn">Save config</button>
       </form>
       <hr>
@@ -123,6 +138,12 @@
 				document.getElementsByName("currentRideID")[0].value = obj.currentRideID;
         document.getElementsByName("currentDragID")[0].value = obj.currentDragID;
 				document.getElementsByName("detectVal")[0].value = obj.detectVal;
+        document.getElementsByName("apName")[0].value = obj.apName;
+        document.getElementsByName("apPass")[0].value = obj.apPass;
+        document.getElementsByName("staName")[0].value = obj.staName;
+        document.getElementsByName("staPass")[0].value = obj.staPass;
+        document.getElementsByName("lastUploaded")[0].value = obj.lastUploaded;
+        document.getElementsByName("webAddress")[0].value = obj.webAddress;
 			}
 		}
 		xmlhttp.open("GET", "/config.json", false );
@@ -131,31 +152,61 @@
 	loadConfig();
 
 	function saveConfig() {
-		var params = "enaLora="+document.getElementById("enaLora").checked+"&currentRideID="+document.getElementsByName("currentRideID")[0].value+"&currentDragID="+document.getElementsByName("currentDragID")[0].value+"&detectVal="+document.getElementsByName("detectVal")[0].value;
+		var params = "enaLora="+document.getElementById("enaLora").checked+"&currentRideID="+document.getElementsByName("currentRideID")[0].value+"&currentDragID="+document.getElementsByName("currentDragID")[0].value+"&detectVal="+document.getElementsByName("detectVal")[0].value+"&apName="+document.getElementsByName("apName")[0].value+"&apPass="+encodeURIComponent(document.getElementsByName("apPass")[0].value)+"&staName="+document.getElementsByName("staName")[0].value+"&staPass="+encodeURIComponent(document.getElementsByName("staPass")[0].value)+"&webAddress="+encodeURIComponent(document.getElementsByName("webAddress")[0].value);
 		var xhr = new XMLHttpRequest();
-		xhr.open("GET", "/saveconfig?"+params, true);
+		xhr.open("GET", "/saveconfig?"+params, false);
 		xhr.send(null);
 	}
 
   function loadLoraStatus() {
-		xmlhttp=new XMLHttpRequest();
-		xmlhttp.onreadystatechange=function()
+		xmlhttpl=new XMLHttpRequest();
+		xmlhttpl.onreadystatechange=function()
 		{
-			if (xmlhttp.readyState==4 && xmlhttp.status==200)
+			if (xmlhttpl.readyState==4 && xmlhttpl.status==200)
 			{
         let out;
-        if(xmlhttp.responseText == 0) {
+        if(xmlhttpl.responseText == 0) {
           out = "Off";
-        } else if (xmlhttp.responseText == 1) {
+        } else if (xmlhttpl.responseText == 1) {
           out = "Joined";
-        } else if (xmlhttp.responseText == 2) {
+        } else if (xmlhttpl.responseText == 2) {
           out = "Join failed";
         }
 				document.getElementById("lorastatus").innerHTML = out;
 			}
 		}
-		xmlhttp.open("GET", "/lora", false );
-		xmlhttp.send();
+		xmlhttpl.open("GET", "/lora", true);
+		xmlhttpl.send();
 	}
 	loadLoraStatus();
+
+  function loadWiFiStatus() {
+		xmlhttpw=new XMLHttpRequest();
+		xmlhttpw.onreadystatechange=function()
+		{
+			if (xmlhttpw.readyState==4 && xmlhttpw.status==200)
+			{
+        let out;
+        if(xmlhttpw.responseText == 0) {
+          out = "Idle";
+        } else if (xmlhttpw.responseText == 1) {
+          out = "No SSID Available";
+        } else if (xmlhttpw.responseText == 2) {
+          out = "Scan Completed";
+        } else if (xmlhttpw.responseText == 3) {
+          out = "Connected";
+        } else if (xmlhttpw.responseText == 4) {
+          out = "Connection Failed";
+        } else if (xmlhttpw.responseText == 5) {
+          out = "Connection Lost";
+        } else if (xmlhttpw.responseText == 6) {
+          out = "Disconnected";
+        }
+				document.getElementById("wifistatus").innerHTML = out;
+			}
+		}
+		xmlhttpw.open("GET", "/wifi", true);
+		xmlhttpw.send();
+	}
+	loadWiFiStatus();
 </script>

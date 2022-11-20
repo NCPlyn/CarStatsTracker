@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <sstream>
 #include <WiFi.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include "SparkFunLSM6DS3.h"
@@ -14,8 +16,6 @@
 #include "loraCreds.h"
 #include "FS.h"
 #include "SD.h"
-
-#define LORALED 26
 
 //------------------SD CARD------------------//
 #define SD_CS 15
@@ -55,8 +55,18 @@ void copyArrays() {
 int loraStatus = 0; //0 off, 1 joined, 2 failed
 
 //------------------WiFi & Web------------------//
-const char* ssid = "CST";
-const char* password = "1234567890";
+String apName = "CST";
+String apPass = "1234567890";
+String staName = "todo";
+String staPass = "todo";
+String webAddress = "example.com/uplink"
+
+WiFiClientSecure wifiClient;
+HTTPClient httpsClient;
+
+unsigned long wifiInterval = 0;
+
+int lastUploaded = 0;
 
 AsyncWebServer server(80);
 
@@ -128,8 +138,14 @@ bool loadSPIFFS() {
 
   currentRideID = doc["currentRideID"].as<int>();
   currentDragID = doc["currentDragID"].as<int>();
+  lastUploaded = doc["lastUploaded"].as<int>();
   enaLora = doc["enaLora"].as<bool>();
   detectVal = doc["detectVal"].as<float>();
+  apName = doc["apName"].as<String>();
+  apPass = doc["apPass"].as<String>();
+  staName = doc["staName"].as<String>();
+  staPass = doc["staPass"].as<String>();
+  webAddress = doc["webAddress"].as<String>();
   return true;
 }
 
@@ -146,8 +162,14 @@ bool saveSPIFFS() {
 
   doc["currentRideID"] = currentRideID;
   doc["currentDragID"] = currentDragID;
+  doc["lastUploaded"] = lastUploaded;
   doc["enaLora"] = enaLora;
   doc["detectVal"] = detectVal;
+  doc["apName"] = apName;
+  doc["apPass"] = apPass;
+  doc["staName"] = staName;
+  doc["staPass"] = staPass;
+  doc["webAddress"] = webAddress;
 
   if (serializeJson(doc, file) == 0) {
     Serial.println("Failed to deserialize the config file");
@@ -167,6 +189,8 @@ void setup() {
   if (!LittleFS.begin(true)) {
     Serial.println("An Error has occurred while mounting LittleFS");
   }
+
+  loadSPIFFS();
 
   for(int x = 0;x<numOfSpeeds;x++) {
     targetSpeedsTime[x] = 0;
@@ -188,10 +212,9 @@ void setup() {
   Serial2.begin(115200, SERIAL_8N1, 16, 17); //RX 16, TX 17
 
   pinMode(0, INPUT);
-  pinMode(LORALED, OUTPUT);
-  digitalWrite(LORALED, LOW);
 
-  WiFi.softAP(ssid, password);
+  WiFi.mode(WIFI_MODE_APSTA);
+  WiFi.softAP(apName.c_str(), apPass.c_str());
   Serial.println(WiFi.softAPIP());
 
   server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
@@ -292,6 +315,19 @@ void setup() {
     }
     request->send(200, "text/plain", String(loraStatus));
   });
+  server.on("/wifi", HTTP_GET, [](AsyncWebServerRequest *request){
+    if(request->hasParam("join")) {
+      if(loraStatus == 2) {
+        WiFi.disconnect();
+        WiFi.begin(staName.c_str(), staPass.c_str());
+        wifiInterval = millis();
+        request->redirect("/config.html");
+      } else {
+        request->send(200, "text/plain", "WiFi is in different status than WL_CONNECTED!");
+      }
+    }
+    request->send(200, "text/plain", String(WiFi.status()));
+  });
   server.on("/getfile", HTTP_GET, [](AsyncWebServerRequest *request){
     if(request->hasParam("rideid")) {
       String path = "/"+request->getParam("rideid")->value()+".data";
@@ -335,9 +371,21 @@ void setup() {
     if(request->hasParam("currentRideID"))
       currentRideID = request->getParam("currentRideID")->value().toInt();
     if(request->hasParam("currentDragID"))
-      currentRideID = request->getParam("currentDragID")->value().toInt();
+      currentDragID = request->getParam("currentDragID")->value().toInt();
+    if(request->hasParam("lastUploaded"))
+      staPass = String(request->getParam("lastUploaded")->value());
     if(request->hasParam("detectVal"))
       detectVal = String(request->getParam("detectVal")->value()).substring(0, 4).toFloat();
+    if(request->hasParam("apName"))
+      apName = String(request->getParam("apName")->value());
+    if(request->hasParam("apPass"))
+      apPass = String(request->getParam("apPass")->value());
+    if(request->hasParam("staName"))
+      staName = String(request->getParam("staName")->value());
+    if(request->hasParam("staPass"))
+      staPass = String(request->getParam("staPass")->value());
+    if(request->hasParam("webAddress"))
+      webAddress = String(request->getParam("webAddress")->value());
     if(saveSPIFFS()) {
       ESP.restart();
       request->redirect("/");
@@ -349,8 +397,15 @@ void setup() {
   server.onNotFound(notFound);
   server.begin();
 
+  File file = LittleFS.open("/certificate.pem", "r");
+  if (!file) {
+    Serial.println("There was an error opening the certificate file!");
+    file.close();
+  } else {
+    wifiClient.loadCACert(file,file.size());
+  }
+
   calibrateAcc();
-  loadSPIFFS();
 
   if(enaLora) {
     copyArrays();
@@ -362,6 +417,7 @@ void setup() {
 
 void loop()
 {
+  //GPS Serial decode
   while (Serial2.available() > 0) {
     if (gps.encode(Serial2.read())) {
       if(!gps.location.isValid() || gps.location.age() > 2000 || gpsFix.value() == 0 || gps.satellites.value() < 2) {
@@ -372,7 +428,8 @@ void loop()
     }
   }
 
-  if(gpsReady==true && routeActive==false && (millis()>lastLora+60000 || (firstLora && loraStatus == 1))){ //if not moving, send every 30mins
+  //If not moving, data to SD every 6 minutes (360000) & lora every 30 minutes (loraReductor)
+  if(gpsReady && !routeActive && (millis()>lastLora+360000 || (firstLora && loraStatus == 1))) {
     Serial.println("sending not move data");
     if(firstLora && loraStatus == 1) {
       firstLora = false;
@@ -383,6 +440,35 @@ void loop()
     lastLora = millis();
   }
 
+  if(WiFi.status() == WL_CONNECTED && enaLora && lastUploaded < currentRideID && !routeActive ) { //only rides so far
+    File file = SD.open("/"+String(lastUploaded+1)+".data");
+    if(file){
+      httpsClient.begin(wifiClient, "https://"+webAddress);
+      while(file.available()){
+        httpsClient.setAuthorization("admin", "admin");
+        httpsClient.addHeader("Content-Type", "text/plain");
+        String data = file.readStringUntil('\n');
+        httpsClient.addHeader("Content-Length", String(data.length()));
+        Serial.println(httpsClient.POST(data));
+      }
+      file.close();
+      httpsClient.end();
+    } else {
+      Serial.println("Failed to open file to send data");
+    }
+    lastUploaded++;
+    saveSPIFFS();
+  }
+
+  //Try to connect to WiFi every 10 minutes (600000)
+  if(WiFi.status() != WL_CONNECTED && millis()>(wifiInterval+60000)) {
+    Serial.println("Reconnecting to WiFi...");
+    WiFi.disconnect();
+    WiFi.begin(staName.c_str(), staPass.c_str());
+    wifiInterval = millis();
+  }
+
+  //Main routines
   if(opMode == 0) {
     if(detectMove && millis()>(detectMoveMillis+5000) && ((myIMU.readFloatAccelX()-deadzoneX)>detectVal || (myIMU.readFloatAccelY()-deadzoneY)>detectVal || (myIMU.readFloatAccelZ()-deadzoneZ)>detectVal)) {
       Serial.println("Movement detected on accel");
@@ -474,13 +560,18 @@ void sendPos(String moving) { //rideid;moving;lat;lng;kmph;epoch
   String out = String(currentRideID)+";"+moving+";"+String(gps.location.lat(),5)+";"+String(gps.location.lng(),5)+";"+String(gps.speed.kmph())+";"+String(getUnix(gps.date.year(),gps.date.month(),gps.date.day(),gps.time.hour(),gps.time.minute(),gps.time.second()));
   Serial.println(out);
   fileOper(SD,"/"+String(currentRideID)+".data",out);
-  if(enaLora && loraStatus == 1 && loraReductor == 0) {
-    send_lora_frame(out);
-    loraReductor = 5;
+  if(enaLora && loraStatus == 1) {
+    if(routeActive) {
+      send_lora_frame(out);
+    } else if (loraReductor == 0) {
+      send_lora_frame(out);
+      loraReductor = 5;
+    } else {
+      loraReductor--;
+    }
   } else { //gsm ready
     //GSM send
   }
-  loraReductor--;
 }
 
 void calibrateAcc() {
@@ -676,7 +767,6 @@ static void lorawan_join_failed_handler(void) {
   Serial.println("OVER_THE_AIR_ACTIVATION failed!");
   Serial.println("Check your EUI's and Keys's!");
   Serial.println("Check if a Gateway is in range!");
-  digitalWrite(LORALED, LOW);
   loraStatus = 2;
 }
 
@@ -690,7 +780,6 @@ static void lorawan_has_joined_handler(void) {
   #endif
   lmh_class_request(CLASS_A);
 
-  digitalWrite(LORALED, HIGH);
   loraStatus = 1;
 }
 

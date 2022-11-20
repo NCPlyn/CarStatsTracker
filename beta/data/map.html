@@ -100,7 +100,7 @@
   				partsArray.pop();
   				for (var i = 0; i < partsArray.length; i++) {
             var n = partsArray[i].indexOf('.');
-            var s = partsArray[i].substring(1, n != -1 ? n : partsArray[i].length);
+            var s = partsArray[i].substring(0, n != -1 ? n : partsArray[i].length);
             document.getElementById("tablebody").innerHTML += "<th scope=\"row\">" + s + "</th><td><button id=\""+s+"\" type=\"button\" class=\"btn btn-primary btn-sm rideLoad\">Load</button> || <a href='./getfile?rideid="+s+"' download>Download</a></td></tr>";
   				}
   			}
