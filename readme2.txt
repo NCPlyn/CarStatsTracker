@@ -3,38 +3,32 @@
 2 pin sim - UART
 2 PIN GPS - UART
 4 sd card - SPI
-tft display/touch
 ----------------------------------------------
 gyro - hotovo
-lora - funguje, ale kontrola připojení a obnovení připojení (asi koupit/vyrobit zesik nebo anténa lepší)
+lora - hotovo
 gps - hotovo
 sd - hotovo
 gsm - vůbec nic
-web - skoro, drag,css
+web - hotovo
 ----------------------------------------------
 normal mode:
 -every 10s sample gyro data and declare if we are moving or not
 -if we started moving, create new ride file+id, start sending lora every so often with that id(start/wake gps)
 -if we stopped-no moving detection for few minutes (gyro or gps(distancefrom func)), end file and stop lora, sleep gps
-drag mode: (best with display,or phone on holder)
--end ride file:
+drag mode:
 -listen for ready on web/display
 -when gyro movement detected (not false positive), start logging all goals
--after deacc- save all to drag file, send special lora packets with basic info about drag
+-after deacc- save all to drag file
 -repeat until switched to normal
-armed mode:
--send SMS every XX minutes
--send lora constantly every XX minutes
--can power on alarm
 GSM:
 -get current gps pos
+-upload to server
 WIFI:
--can dump all on wifi internet connect
+-dump all on wifi internet connect
 -control panel to change settings
 -see drags, taken routes, info about them (how long, fastest speed,map,id,when taken, etc.)
 -(same on nodejs server)
 
-https://randomnerdtutorials.com/esp32-esp-now-wi-fi-web-server/ (něco jako socketio xd)
 https://eu1.cloud.thethings.network/console/applications/carstatstracker/data
 
 openssl req -newkey rsa:2048 -x509 -nodes -keyout privatekey.pam -new -out certificate.pem -subj /CN=example.com -reqexts SAN -extensions SAN -config config.txt -sha256 -days 3650
@@ -42,21 +36,21 @@ openssl req -newkey rsa:2048 -x509 -nodes -keyout privatekey.pam -new -out certi
 rideId,moving(y/n),lat,lng,kmph,epochTime
 
 ----------------------------------------------
+
+1. odzkoušet vše zatím (drag,lora,wifi)
+2. bug/stress test
+
+SHOULD DO:
 260???
 GSM - celé na esp
+
+
+
+NOT GONNA DO:
+lora - přejít na Helium?
 drag - server(upload+view) & esp(upload)
 
-1. odzkoušet vše zatím
-drag - test irl
-2. opravit chyby a pokusit se najít ostatní a opravit
-3. box
-
-lora - přejít na Helium?
 bacha hesla v config a basicauth
-
-módy:
--LoRa/WiFi https://techtutorialsx.com/2017/11/18/esp32-arduino-https-get-request/
--GSM - Arduino-SIM800L-driver nebo TinyGSM
 
 ----------------------------------------------
 WEB:

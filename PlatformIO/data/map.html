@@ -1,0 +1,113 @@
+<html>
+  <head>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.8.0/dist/leaflet.css" integrity="sha512-hoalWLoI8r4UszCkZ5kL8vayOGVae1oxXe/2A4AO6J9+580uKHDO3JdHb7NzwwzK5xr/Fs0W40kiNHxM9vyTtQ==" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.8.0/dist/leaflet.js" integrity="sha512-BB3hKbKWOc9Ez/TAwyWxNXeoV9c1v6FIeYiBieIWkpLjauysF18NzgR1MBNBXf8/KABdlkX68nAhlwcDFLGPCQ==" crossorigin=""></script>
+    <link rel="stylesheet" href="//unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.css" type="text/css">
+    <script src="//unpkg.com/leaflet-gesture-handling"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=">
+    <title>CarStatsTracker</title>
+  </head>
+  <style>
+    #map {
+      height: 80%;
+    }
+    a,a:link,a:visited {
+      color:white;
+    }
+    body {
+      font-family:Verdana;
+      background-color:#333743;
+      color:white;
+      text-align:center;
+    }
+    td {
+      margin-left: 1%;
+    }
+  </style>
+
+  <body>
+    <a href='/'>ROUTE</a> / <a href='/drag.html'>DRAG</a> / <a href='/config.html'>SETTINGS</a><br><hr>
+    <div id="map"></div>
+    <table>
+      <tbody id="tablebody">
+      </tbody>
+    </table>
+  </body>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+</html>
+
+<script>
+
+  var map = L.map('map', {
+    center: [49.939, 17.905],
+    zoom: 15,
+    gestureHandling: true
+  })
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "© OpenStreetMap"
+  }).addTo(map);
+
+
+  var markerArray = [];
+  var maNum = 0;
+
+  function placeData(moving,lat,lng,speed,epoch) {
+    //moving;lat;lng;speed;epoch
+    var d = new Date(0);
+    d.setUTCSeconds(epoch);
+    markerArray[maNum] = L.marker([lat, lng]).addTo(map).bindPopup("<b>Speed:</b> " + speed + "km/h<br><b>Time:</b> " + d.toUTCString());
+    maNum++;
+    if (maNum > 1 && moving == "y") {
+      L.polygon([
+        markerArray[maNum - 2].getLatLng(),
+        markerArray[maNum - 1].getLatLng()
+      ]).addTo(map);
+    }
+  }
+
+  function getRemote(remote_url) {
+    return $.ajax({
+        type: "GET",
+        url: remote_url,
+        async: false
+    }).responseText;
+  }
+
+  $('#tablebody').on('click','.rideLoad', function() {
+    maNum = 0;
+    map.eachLayer((layer) => {
+      if(!layer.hasOwnProperty('_url'))
+        layer.remove();
+    });
+    var rideFile = getRemote("./getfile?rideid="+$(this).attr('id')).split("\r\n");
+    for(var i = 0; i+1 < rideFile.length; i++) {
+      var parsed = rideFile[i].split(";");
+      for(var x = 0; x < parsed.length; x++) {
+        placeData(parsed[1],parsed[2],parsed[3],parsed[4],parsed[5]);
+      }
+    }
+  });
+
+  function loadFiles() {
+  		xmlhttp=new XMLHttpRequest();
+  		xmlhttp.onreadystatechange=function()
+  		{
+  			if (xmlhttp.readyState==4 && xmlhttp.status==200)
+  			{
+  				var partsArray = xmlhttp.responseText.split(';');
+  				partsArray.pop();
+  				for (var i = 0; i < partsArray.length; i++) {
+            var n = partsArray[i].indexOf('.');
+            var s = partsArray[i].substring(0, n != -1 ? n : partsArray[i].length);
+            document.getElementById("tablebody").innerHTML += "<th scope=\"row\">" + s + "</th><td><button id=\""+s+"\" type=\"button\" class=\"btn btn-primary btn-sm rideLoad\">Load</button> || <a href='./getfile?rideid="+s+"' download>Download</a></td></tr>";
+  				}
+  			}
+  		}
+  		xmlhttp.open("GET", "/getfiles", false );
+  		xmlhttp.send();
+  	}
+  	loadFiles();
+
+</script>

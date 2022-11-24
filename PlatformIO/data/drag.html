@@ -1,0 +1,380 @@
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=">
+    <meta charset="UTF-8">
+    <title>CarStatsTracker</title>
+  </head>
+  <style>
+    body {
+      font-family:Verdana;
+      text-align:center;
+      background-color:#333743;
+      color:white;
+      margin:0;
+    }
+    table {
+      margin-left: auto;
+      margin-right: auto;
+      border: 1px solid;
+      border-collapse: collapse;
+      text-align: center;
+    }
+    td, th {
+      border-color: white;
+      border: 1px solid;
+    }
+    .th_from_to {
+      min-width:50px;
+    }
+    .th_time_dist {
+      min-width:95px;
+    }
+    input {
+      margin-top:7px;
+      background-color:#21252B;
+      color:white;
+      border:3px solid #3f444d;
+      border-radius:4px;
+      padding: 5px 8px;
+    }
+    .btn {
+    	background-color:#24282b;
+      border:2px solid #3B4048;
+      border-radius:12px;
+    	color:#f5f5f5;
+      line-height: 1.5;
+    	padding: 0.375rem 0.75rem;
+      font-size: 1rem;
+      transition: color .15s ease-in-out,background-color .15s ease-in-out,border-color .15s ease-in-out,box-shadow .15s ease-in-out;
+    }
+    .btn:hover {
+    	background-color:#474a4d;
+    }
+    .btn:active {
+    	position:relative;
+    	top:1px;
+    }
+    .bigbtn {
+      font-size: 1.5rem;
+    }
+    header {
+      background-color: #484d59;
+      float:left;
+	    width:100%;
+	    position:relative;
+    }
+    ul {
+      list-style: none;
+    	float:right;
+    	position:relative;
+    	right:50%;
+    }
+    li {
+    	float:left;
+      position:relative;
+    	left:50%;
+    }
+    li a {
+      color: white;
+      padding: 14px 16px;
+      text-decoration: none;
+    }
+    li a:hover:not(.active) {
+      background-color: #333;
+    }
+    .active {
+      background-color: #04AA6D;
+    }
+  </style>
+  <body>
+    <header>
+      <ul>
+        <li><a href='./'>Route</a></li>
+        <li><a href='./drag.html' class="active">Drag</a></li>
+        <li><a href='./config.html'>Settings</a></li>
+      </ul>
+    </header>
+    <hr><br>
+    <button onclick="doDrag()" class="btn bigbtn">DO-DRAG</button><br>
+    <button onclick="location.href='./forceDragStart'" class="btn">forceStart</button>
+    <button onclick="location.href='./forceDragStop'" class="btn">forceStop</button><br>
+    <p id="dodragstat">Drag status</p>
+    <h2 id="speed" onclick="getSpeed();">0 km/h</h2>
+    <hr>
+    <div>
+      <h2>Speed</h2>
+      <form>
+        <label for="Sfrom">From: </label>
+        <input type="number" name="Sfrom" id="Sfrom" min="0" max="300" placeholder="0">
+        <label for="Sto">To: </label>
+        <input type="number" name="Sto" id="Sto" min="0" max="300" placeholder="100"><br>
+        <br>
+        <button type="button" onclick="addTableSpeed()" class="btn bigbtn">Add speed</button>
+      </form>
+      <table id="TS">
+        <thead>
+          <tr>
+            <th class="th_from_to">From</th>
+            <th class="th_from_to">To</th>
+            <th class="th_time_dist">Time</th>
+            <th class="th_time_dist">Distance</th>
+            <th>Del</th>
+          </tr>
+        </thead>
+        <tbody id="TSbody">
+          <tr>
+            <td>0</td>
+            <td>50</td>
+            <td></td>
+            <td></td>
+            <td><button onclick="document.getElementById('TS').deleteRow(1);">X</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <br>
+    <div>
+      <h2>Distance</h2>
+      <form>
+        <label for="Dfrom">From: </label>
+        <input type="number" name="Dfrom" id="Dfrom" min="0" max="3000" placeholder="0">
+        <label for="Dto">To: </label>
+        <input type="number" name="Dto" id="Dto" min="0" max="3000" placeholder="100"><br>
+        <br>
+        <button type="button" onclick="addTableDist()" class="btn bigbtn">Add distance</button>
+      </form>
+      <table id="TD">
+        <thead>
+          <tr>
+            <th class="th_from_to">From</th>
+            <th class="th_from_to">To</th>
+            <th class="th_time_dist">Time</th>
+            <th>Del</th>
+          </tr>
+        </thead>
+        <tbody id="TDbody">
+          <tr>
+            <td>0</td>
+            <td>100</td>
+            <td></td>
+            <td><button onclick="document.getElementById('TD').deleteRow(1);">X</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <br><hr>
+    <table style="margin-left: auto;margin-right: auto;">
+      <tbody id="tablebody">
+      </tbody>
+    </table>
+  </body>
+</html>
+
+<script>
+//on click of DODRAG, build json, sent it, wait for good return, start timers for data refresh, once json returns ended drag, kill refreshers
+//keep speed running every 2s
+  function addTableSpeed() {
+    if(Number(document.getElementById("Sfrom").value) < Number(document.getElementById("Sto").value)) {
+      var oRows = document.getElementById("TS").getElementsByTagName('td');
+      document.getElementById("TSbody").innerHTML += "<tr><td>"+document.getElementById("Sfrom").value+"</td><td>"+document.getElementById("Sto").value+"</td><td></td><td></td><td><button onclick=\"document.getElementById('TS').deleteRow("+(oRows.length+1)+");\">X</button></td></tr>";
+    } else {
+      alert("Speed 'from' cannot be bigger that speed 'to'");
+    }
+  }
+  function addTableDist() {
+    if(Number(document.getElementById("Dfrom").value) < Number(document.getElementById("Dto").value)) {
+      var oRows = document.getElementById("TD").getElementsByTagName('td');
+      document.getElementById("TDbody").innerHTML += "<tr><td>"+document.getElementById("Dfrom").value+"</td><td>"+document.getElementById("Dto").value+"</td><td></td><td><button onclick=\"document.getElementById('TD').deleteRow("+(oRows.length+1)+");\">X</button></td></tr>";
+    } else {
+      alert("Distance 'from' cannot be bigger that distance 'to'");
+    }
+  }
+
+  let dataInt;
+
+  function doDrag() {
+    let speedArray = [];
+
+    for(let x = 1; x < document.getElementById("TS").rows.length; x++) {
+      let num = Number(document.getElementById("TS").rows[x].cells.item(0).innerHTML);
+      if(!speedArray.includes(num) && num != 0) {
+        speedArray.push(num);
+      }
+      num = Number(document.getElementById("TS").rows[x].cells.item(1).innerHTML)
+      if(!speedArray.includes(num) && num != 0) {
+        speedArray.push(num);
+      }
+    }
+
+    let distArray = [];
+
+    for(let x = 1; x < document.getElementById("TD").rows.length; x++) {
+      let num = Number(document.getElementById("TD").rows[x].cells.item(0).innerHTML);
+      if(!distArray.includes(num) && num != 0) {
+        distArray.push(num);
+      }
+      num = Number(document.getElementById("TD").rows[x].cells.item(1).innerHTML)
+      if(!distArray.includes(num) && num != 0) {
+        distArray.push(num);
+      }
+    }
+
+    let obj = { speed: [], dist: [] };
+    let tempArray = [];
+
+    for(let x = 0; x < speedArray.length; x++) {
+      tempArray = [];
+      for(let y = 1; y < document.getElementById("TS").rows.length; y++) {
+        if(Number(document.getElementById("TS").rows[y].cells.item(1).innerHTML) == speedArray[x]) {
+          tempArray.push(Number(document.getElementById("TS").rows[y].cells.item(0).innerHTML));
+        }
+      }
+      if(tempArray.length == 0) {
+        obj.speed.push({targ: speedArray[x]});
+      } else {
+        obj.speed.push({targ: speedArray[x], from: tempArray});
+      }
+    }
+
+    for(let x = 0; x < distArray.length; x++) {
+      tempArray = [];
+      for(let y = 1; y < document.getElementById("TD").rows.length; y++) {
+        if(Number(document.getElementById("TD").rows[y].cells.item(1).innerHTML) == distArray[x]) {
+          tempArray.push(Number(document.getElementById("TD").rows[y].cells.item(0).innerHTML));
+        }
+      }
+      if(tempArray.length == 0) {
+        obj.dist.push({targ: distArray[x]});
+      } else {
+        obj.dist.push({targ: distArray[x], from: tempArray});
+      }
+    }
+
+    xmlhttp=new XMLHttpRequest();
+    xmlhttp.onreadystatechange=function()
+    {
+      if (xmlhttp.readyState==4 && xmlhttp.status==200)
+      {
+        let inString = xmlhttp.responseText;
+        document.getElementById("dodragstat").innerHTML = inString;
+        if(inString.charAt(0) == "W") {
+          dataInt = setInterval(function () {
+            getSpeed();
+            getData();
+          }, 1000);
+        }
+      }
+    }
+    xmlhttp.open("POST", "/doDrag", false);
+    xmlhttp.send("json="+JSON.stringify(obj));
+  }
+
+  function getSpeed() {
+    xmlhttpSpeed = new XMLHttpRequest();
+    xmlhttpSpeed.onreadystatechange=function()
+    {
+      if (xmlhttpSpeed.readyState==4 && xmlhttpSpeed.status==200)
+      {
+        document.getElementById("speed").innerHTML = xmlhttpSpeed.responseText;
+      }
+    }
+    xmlhttpSpeed.open("GET", "/getSpeed", true);
+    xmlhttpSpeed.send();
+  }
+  getSpeed();
+  //setInterval(function () {getSpeed();}, 10000);
+
+  function fillData(jsontoparse) {
+    document.getElementById("TSbody").innerHTML = "";
+    document.getElementById("TDbody").innerHTML = "";
+    console.log(jsontoparse);
+    let obj = JSON.parse(jsontoparse);
+    if(obj.ended == true && dataInt != null) {
+      clearInterval(dataInt);
+      dataInt = null;
+    }
+    for(let x = 0; x < obj.speed.length; x++) { //x = current targ
+      if(obj.speed[x].hasOwnProperty('from')) {
+        for(let y = 0; y < obj.speed[x].from.length; y++) { //y = current from in targ
+          let resultTime, resultDistance = 0;
+          if(obj.speed[x].from[y] == 0) {
+            resultTime = obj.speed[x].time;
+            resultDistance = obj.speed[x].dist;
+          } else {
+            for(let z = 0; z < obj.speed.length; z++) { //z = current targ
+              if(obj.speed[z].targ == obj.speed[x].from[y]) {
+                resultTime = obj.speed[x].time - obj.speed[z].time;
+                resultDistance = obj.speed[x].dist - obj.speed[z].dist;
+                break;
+              }
+            }
+          }
+          var oRows = document.getElementById("TS").getElementsByTagName('td');
+          document.getElementById("TSbody").innerHTML += "<tr><td>"+obj.speed[x].from[y]+"</td><td>"+obj.speed[x].targ+"</td><td>"+resultTime+"</td><td>"+resultDistance+"</td><td><button onclick=\"document.getElementById('TS').deleteRow("+(oRows.length+1)+");\">Remove</button></td></tr>";
+        }
+      }
+    }
+    for(let x = 0; x < obj.dist.length; x++) { //x = current targ
+      if(obj.speed[x].hasOwnProperty('from')) {
+        for(let y = 0; y < obj.dist[x].from.length; y++) { //y = current from in targ
+          let resultTime;
+          if(obj.dist[x].from[y] == 0) {
+            resultTime = obj.dist[x].time;
+          } else {
+            for(let z = 0; z < obj.dist.length; z++) { //z = current targ
+              if(obj.dist[z].targ == obj.dist[x].from[y]) {
+                resultTime = obj.dist[x].time - obj.dist[z].time;
+                break;
+              }
+            }
+          }
+          var oRows = document.getElementById("TD").getElementsByTagName('td');
+          document.getElementById("TDbody").innerHTML += "<tr><td>"+obj.dist[x].from[y]+"</td><td>"+obj.dist[x].targ+"</td><td>"+resultTime+"</td><td><button onclick=\"document.getElementById('TD').deleteRow("+(oRows.length+1)+");\">Remove</button></td></tr>";
+        }
+      }
+    }
+  }
+
+  function getData() { //{"speed":[{"targ":50,"from":[0], time: 1655468, dist: 150}],"dist":[{"targ":100,"from":[0], time: 1655468}]}
+    xmlhttpData = new XMLHttpRequest();
+    xmlhttpData.onreadystatechange=function() {
+      if (xmlhttpData.readyState==4 && xmlhttpData.status==200) {
+        fillData(xmlhttpData.responseText);
+      }
+    }
+    xmlhttpData.open("GET", "/getProcDrag", true );
+    xmlhttpData.send();
+  }
+
+  function loadFile(id) {
+  	xmlhttp=new XMLHttpRequest();
+  	xmlhttp.onreadystatechange=function() {
+  		if (xmlhttp.readyState==4 && xmlhttp.status==200) {
+  			fillData(xmlhttp.responseText);
+  		}
+  	}
+  	xmlhttp.open("GET", "./getfile?rideid="+id, true );
+  	xmlhttp.send();
+  }
+
+  function loadFiles() {
+  	xmlhttp=new XMLHttpRequest();
+  	xmlhttp.onreadystatechange=function() {
+  		if (xmlhttp.readyState==4 && xmlhttp.status==200) {
+  			var partsArray = xmlhttp.responseText.split(';');
+  			partsArray.pop();
+  			for (var i = 0; i < partsArray.length; i++) {
+          var n = partsArray[i].indexOf('.');
+          var s = partsArray[i].substring(0, n != -1 ? n : partsArray[i].length);
+          if(s.includes("d")) {
+            document.getElementById("tablebody").innerHTML += "<th>" + s + "</th><td><button onclick=\"loadFile(\'"+s+"\')\" type=\"button\">Load</button></td></tr>";
+          }
+  			}
+  		}
+  	}
+  	xmlhttp.open("GET", "/getfiles", true );
+  	xmlhttp.send();
+  }
+  loadFiles();
+</script>

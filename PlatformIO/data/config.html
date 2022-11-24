@@ -1,0 +1,212 @@
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=">
+    <meta charset="UTF-8">
+    <title>CarStatsTracker</title>
+  </head>
+  <style>
+    a,a:link,a:visited {
+      color:white;
+    }
+    body {
+      font-family:Verdana;
+      text-align:center;
+      background-color:#333743;
+      color:white;
+      margin:0;
+    }
+    input {
+      margin-top:7px;
+      background-color:#21252B;
+      color:white;
+      border:3px solid #3f444d;
+      border-radius:4px;
+      padding: 5px 8px;
+    }
+    p,h3 {
+      margin-block-start: 0.5em;
+      margin-block-end: 0.2em;
+    }
+    main {
+      width:20em;
+      margin: auto;
+    }
+    .btn {
+    	background-color:#24282b;
+      border:2px solid #3B4048;
+      border-radius:12px;
+    	color:#f5f5f5;
+      line-height: 1.5;
+    	padding: 0.375rem 0.75rem;
+      font-size: 1rem;
+      transition: color .15s ease-in-out,background-color .15s ease-in-out,border-color .15s ease-in-out,box-shadow .15s ease-in-out;
+    }
+    .btn:hover {
+    	background-color:#474a4d;
+    }
+    .btn:active {
+    	position:relative;
+    	top:1px;
+    }
+    header {
+      background-color: #484d59;
+      float:left;
+	    width:100%;
+	    position:relative;
+    }
+    ul {
+      list-style: none;
+    	float:right;
+    	position:relative;
+    	right:50%;
+    }
+    li {
+    	float:left;
+      position:relative;
+    	left:50%;
+    }
+    li a {
+      color: white;
+      padding: 14px 16px;
+      text-decoration: none;
+    }
+    li a:hover:not(.active) {
+      background-color: #333;
+    }
+    .active {
+      background-color: #04AA6D;
+    }
+  </style>
+  <body>
+    <header>
+      <ul>
+        <li><a href='./'>Route</a></li>
+        <li><a href='./drag.html'>Drag</a></li>
+        <li><a href='./config.html' class="active">Settings</a></li>
+      </ul>
+    </header>
+    <main>
+      <hr><h3>Mode switch</h3><hr>
+      <button onclick="window.location = './opmode?val=1'" class="btn">DRAG</button>
+      <button onclick="window.location = './opmode?val=0'" class="btn">NORMAL</button>
+      <hr><h3>LoRa stuff</h3><hr>
+      LoraStatus: <b id="lorastatus">---------</b><br>
+      <button onclick="window.location = './lora?join'" class="btn">LoraWAN join</button><br><br>
+      <form>
+        <label for="enaLora">enaLora: </label>
+        <input type="checkbox" id="enaLora"><br>
+        <hr><h3>Misc. stuff</h3><hr>
+        <label for="currentRideID">currentRideID: </label>
+        <input type="number" name="currentRideID"><br>
+        <label for="currentDragID">currentDragID: </label>
+        <input type="number" name="currentDragID"><br>
+        <label for="lastUploaded">lastUploaded: </label>
+        <input type="number" name="lastUploaded"><br>
+        <label for="detectVal">detectVal (default:0.4): </label>
+        <input type="number" name="detectVal" min="0" max="10"><br><br>
+        <hr><h3>WiFi stuff</h3><hr>
+        WiFi Status: <b id="wifistatus">---------</b><br>
+        <button onclick="window.location = './wifi?join'" class="btn">WiFi connect</button><br>
+        <label for="apName">AP Name: </label>
+        <input type="text" name="apName"><br>
+        <label for="apPass">AP Pass: </label>
+        <input type="text" name="apPass"><br>
+        <label for="apName">STA Name: </label>
+        <input type="text" name="staName"><br>
+        <label for="apPass">STA Pass: </label>
+        <input type="text" name="staPass"><br>
+        <label for="webAddress">POST WebAddress: </label>
+        <input type="text" name="webAddress"><br><br>
+        <button type="button" onclick="saveConfig()" class="btn">Save config</button>
+      </form>
+      <hr>
+      <button onclick="window.location = './calibrate'" class="btn">CALIBRATE</button>
+    </main>
+  </body>
+</html>
+
+<script>
+	function loadConfig() {
+		xmlhttp=new XMLHttpRequest();
+		xmlhttp.onreadystatechange=function()
+		{
+			if (xmlhttp.readyState==4 && xmlhttp.status==200)
+			{
+				var obj = JSON.parse(xmlhttp.responseText);
+				document.getElementById("enaLora").checked = obj.enaLora;
+				document.getElementsByName("currentRideID")[0].value = obj.currentRideID;
+        document.getElementsByName("currentDragID")[0].value = obj.currentDragID;
+				document.getElementsByName("detectVal")[0].value = obj.detectVal;
+        document.getElementsByName("apName")[0].value = obj.apName;
+        document.getElementsByName("apPass")[0].value = obj.apPass;
+        document.getElementsByName("staName")[0].value = obj.staName;
+        document.getElementsByName("staPass")[0].value = obj.staPass;
+        document.getElementsByName("lastUploaded")[0].value = obj.lastUploaded;
+        document.getElementsByName("webAddress")[0].value = obj.webAddress;
+			}
+		}
+		xmlhttp.open("GET", "/config.json", false );
+		xmlhttp.send();
+	}
+	loadConfig();
+
+	function saveConfig() {
+		var params = "enaLora="+document.getElementById("enaLora").checked+"&currentRideID="+document.getElementsByName("currentRideID")[0].value+"&currentDragID="+document.getElementsByName("currentDragID")[0].value+"&detectVal="+document.getElementsByName("detectVal")[0].value+"&apName="+document.getElementsByName("apName")[0].value+"&apPass="+encodeURIComponent(document.getElementsByName("apPass")[0].value)+"&staName="+document.getElementsByName("staName")[0].value+"&staPass="+encodeURIComponent(document.getElementsByName("staPass")[0].value)+"&webAddress="+encodeURIComponent(document.getElementsByName("webAddress")[0].value);
+		var xhr = new XMLHttpRequest();
+		xhr.open("GET", "/saveconfig?"+params, false);
+		xhr.send(null);
+	}
+
+  function loadLoraStatus() {
+		xmlhttpl=new XMLHttpRequest();
+		xmlhttpl.onreadystatechange=function()
+		{
+			if (xmlhttpl.readyState==4 && xmlhttpl.status==200)
+			{
+        let out;
+        if(xmlhttpl.responseText == 0) {
+          out = "Off";
+        } else if (xmlhttpl.responseText == 1) {
+          out = "Joined";
+        } else if (xmlhttpl.responseText == 2) {
+          out = "Join failed";
+        }
+				document.getElementById("lorastatus").innerHTML = out;
+			}
+		}
+		xmlhttpl.open("GET", "/lora", true);
+		xmlhttpl.send();
+	}
+	loadLoraStatus();
+
+  function loadWiFiStatus() {
+		xmlhttpw=new XMLHttpRequest();
+		xmlhttpw.onreadystatechange=function()
+		{
+			if (xmlhttpw.readyState==4 && xmlhttpw.status==200)
+			{
+        let out;
+        if(xmlhttpw.responseText == 0) {
+          out = "Idle";
+        } else if (xmlhttpw.responseText == 1) {
+          out = "No SSID Available";
+        } else if (xmlhttpw.responseText == 2) {
+          out = "Scan Completed";
+        } else if (xmlhttpw.responseText == 3) {
+          out = "Connected";
+        } else if (xmlhttpw.responseText == 4) {
+          out = "Connection Failed";
+        } else if (xmlhttpw.responseText == 5) {
+          out = "Connection Lost";
+        } else if (xmlhttpw.responseText == 6) {
+          out = "Disconnected";
+        }
+				document.getElementById("wifistatus").innerHTML = out;
+			}
+		}
+		xmlhttpw.open("GET", "/wifi", true);
+		xmlhttpw.send();
+	}
+	loadWiFiStatus();
+</script>

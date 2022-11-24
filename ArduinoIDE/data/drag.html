@@ -366,7 +366,7 @@
   			partsArray.pop();
   			for (var i = 0; i < partsArray.length; i++) {
           var n = partsArray[i].indexOf('.');
-          var s = partsArray[i].substring(1, n != -1 ? n : partsArray[i].length);
+          var s = partsArray[i].substring(0, n != -1 ? n : partsArray[i].length);
           if(s.includes("d")) {
             document.getElementById("tablebody").innerHTML += "<th>" + s + "</th><td><button onclick=\"loadFile(\'"+s+"\')\" type=\"button\">Load</button></td></tr>";
           }
