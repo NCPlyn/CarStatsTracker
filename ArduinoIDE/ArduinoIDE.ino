@@ -10,6 +10,7 @@
 #include "SPI.h"
 #include <TinyGPS++.h>
 #include <ArduinoJson.h>
+#include <ArduinoSort.h>
 #include <LoRaWan-Arduino.h>
 #define CONFIG_LITTLEFS_SPIFFS_COMPAT 1
 #include <LittleFS.h>
@@ -59,7 +60,7 @@ String apName = "CST";
 String apPass = "1234567890";
 String staName = "todo";
 String staPass = "todo";
-String webAddress = "example.com/uplink"
+String webAddress = "example.com/uplink";
 
 WiFiClientSecure wifiClient;
 HTTPClient httpsClient;
@@ -81,27 +82,28 @@ TinyGPSCustom gpsFix(gps, "GPGGA", 6);
 LSM6DS3 myIMU;
 
 //------------------Variable declaration------------------//
-float deadzoneX=0,deadzoneY=0,deadzoneZ=0;
+volatile float deadzoneX=0,deadzoneY=0,deadzoneZ=0;
 
-int opMode = 0; //0 - normal, 1 - drag
+volatile int opMode = 0; //0 - normal, 1 - drag
 int currentRideID = 0, currentDragID = 0;
 bool enaLora = true; //false - GSM
 float detectVal=0.4;
 
 //------Drag------
-int numOfSpeeds = 2;
-int targetSpeeds[30] = {30,50};
-double targetSpeedsTime[30], targetSpeedsDist[30];
+volatile int numOfSpeeds = 0;
+volatile int targetSpeeds[30] = {10};
+volatile double targetSpeedsTime[30], targetSpeedsDist[30];
 
-int numOfDistances = 4;
-int targetDistances[30] = {100,201,305,402};
-double targetDistancesTime[30];
+volatile int numOfDistances = 0;
+volatile int targetDistances[30] = {100};
+volatile double targetDistancesTime[30];
 
-bool dragging = false, doDrag = false;
-double startLat = 0, startLng = 0;
-unsigned long startTime = 0, startTimeGPS = 0;
+volatile bool dragging = false, doDrag = false, dEnded = false;
+volatile double startLat = 0, startLng = 0;
+volatile unsigned long startTime = 0, startTimeGPS = 0;
 
 String dragJson;
+int lastUploadedDrag = 0;
 
 //------Normal------
 unsigned long detectMoveMillis = millis(), lastLora = millis();
@@ -139,6 +141,7 @@ bool loadSPIFFS() {
   currentRideID = doc["currentRideID"].as<int>();
   currentDragID = doc["currentDragID"].as<int>();
   lastUploaded = doc["lastUploaded"].as<int>();
+  lastUploadedDrag = doc["lastUploadedDrag"].as<int>();
   enaLora = doc["enaLora"].as<bool>();
   detectVal = doc["detectVal"].as<float>();
   apName = doc["apName"].as<String>();
@@ -163,6 +166,7 @@ bool saveSPIFFS() {
   doc["currentRideID"] = currentRideID;
   doc["currentDragID"] = currentDragID;
   doc["lastUploaded"] = lastUploaded;
+  doc["lastUploadedDrag"] = lastUploadedDrag;
   doc["enaLora"] = enaLora;
   doc["detectVal"] = detectVal;
   doc["apName"] = apName;
@@ -216,13 +220,14 @@ void setup() {
   WiFi.mode(WIFI_MODE_APSTA);
   WiFi.softAP(apName.c_str(), apPass.c_str());
   Serial.println(WiFi.softAPIP());
+  WiFi.setAutoReconnect(false);
 
   server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
 
   server.on("/opmode", HTTP_GET, [](AsyncWebServerRequest *request){
     if(request->hasParam("val")) {
       modeSwitch(request->getParam("val")->value().toInt());
-      if(request->getParam("val")->value() == 0) {
+      if(request->getParam("val")->value().toInt() == 0) {
         request->redirect("/");
       } else {
         request->redirect("/drag.html");
@@ -233,6 +238,13 @@ void setup() {
   server.on("/doDrag", HTTP_POST, [](AsyncWebServerRequest *request){
     if(opMode == 1 && gpsReady && !doDrag && request->hasParam("json", true)) {
       calibrateAcc();
+      for(int x = 0;x<30;x++){
+        targetSpeeds[x] = 0;
+        targetSpeedsTime[x] = 0;
+        targetSpeedsDist[x] = 0;
+        targetDistances[x] = 0;
+        targetDistancesTime[x] = 0;
+      }
       //get json and put it in global string
       dragJson = request->getParam("json", true)->value();
       //parse
@@ -248,17 +260,19 @@ void setup() {
       JsonArray distanceArray = doc["dist"];
       for (JsonObject t : distanceArray) {
         targetDistances[numOfDistances] = t["targ"].as<int>();
-        //Serial.println(targetDistances[numOfDistances]);
         numOfDistances++;
       }
+      sortArray(targetDistances, numOfDistances);
       //do same for distance
       numOfSpeeds = 0;
       JsonArray speedArray = doc["speed"];
       for (JsonObject t : speedArray) {
         targetSpeeds[numOfSpeeds] = t["targ"].as<int>();
-        //Serial.println(targetSpeeds[numOfSpeeds]);
         numOfSpeeds++;
       }
+      sortArray(targetSpeeds, numOfSpeeds);
+      startTimeGPS = 0;
+      dEnded = false;
       doDrag = true;
       Serial.println(doDrag); //musí se to přečíst nebo delay nebo co??
       request->send(200, "text/plain", "Waiting for movement/forced command");
@@ -272,12 +286,12 @@ void setup() {
   });
   server.on("/forceDragStop", HTTP_GET, [](AsyncWebServerRequest *request){
     dragging = false;
-    request->redirect("/drag.html");
+    request->send(200);
   });
   server.on("/forceDragStart", HTTP_GET, [](AsyncWebServerRequest *request){
     if(opMode == 1 && gpsReady && doDrag) {
       dragTimer();
-      request->redirect("/drag.html");
+      request->send(200);
     } else if (opMode == 0) {
       request->send(200, "text/plain", "not in drag mode");
     } else if (!gpsReady) {
@@ -301,7 +315,7 @@ void setup() {
   });
   server.on("/getProcDrag", HTTP_GET, [](AsyncWebServerRequest *request){
     char proccesed[2048];
-    processDrag(true, proccesed, startTime, startLat, startLng);
+    processDrag(true, proccesed, startTimeGPS, startLat, startLng);
     request->send(200, "text/plain", proccesed);
   });
   server.on("/lora", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -317,7 +331,7 @@ void setup() {
   });
   server.on("/wifi", HTTP_GET, [](AsyncWebServerRequest *request){
     if(request->hasParam("join")) {
-      if(loraStatus == 2) {
+      if(WiFi.status() != WL_CONNECTED) {
         WiFi.disconnect();
         WiFi.begin(staName.c_str(), staPass.c_str());
         wifiInterval = millis();
@@ -341,7 +355,6 @@ void setup() {
       while(file.available()){
           dataFileContents += (char)file.read();
       }
-      //Serial.println(dataFileContents);
       file.close();
       request->send(200, "text/plain", dataFileContents);
     } else {
@@ -374,6 +387,8 @@ void setup() {
       currentDragID = request->getParam("currentDragID")->value().toInt();
     if(request->hasParam("lastUploaded"))
       staPass = String(request->getParam("lastUploaded")->value());
+    if(request->hasParam("lastUploadedDrag"))
+      staPass = String(request->getParam("lastUploadedDrag")->value());
     if(request->hasParam("detectVal"))
       detectVal = String(request->getParam("detectVal")->value()).substring(0, 4).toFloat();
     if(request->hasParam("apName"))
@@ -428,50 +443,65 @@ void loop()
     }
   }
 
-  //If not moving, data to SD every 6 minutes (360000) & lora every 30 minutes (loraReductor)
-  if(gpsReady && !routeActive && (millis()>lastLora+360000 || (firstLora && loraStatus == 1))) {
-    Serial.println("sending not move data");
-    if(firstLora && loraStatus == 1) {
-      firstLora = false;
-      loraReductor = 0;
-      delay(200);
-    }
-    sendPos("n");
-    lastLora = millis();
-  }
-
-  if(WiFi.status() == WL_CONNECTED && enaLora && lastUploaded < currentRideID && !routeActive ) { //only rides so far
-    File file = SD.open("/"+String(lastUploaded+1)+".data");
-    if(file){
-      httpsClient.begin(wifiClient, "https://"+webAddress);
-      while(file.available()){
-        httpsClient.setAuthorization("admin", "admin");
-        httpsClient.addHeader("Content-Type", "text/plain");
-        String data = file.readStringUntil('\n');
-        httpsClient.addHeader("Content-Length", String(data.length()));
-        Serial.println(httpsClient.POST(data));
-      }
-      file.close();
-      httpsClient.end();
-    } else {
-      Serial.println("Failed to open file to send data");
-    }
-    lastUploaded++;
-    saveSPIFFS();
-  }
-
-  //Try to connect to WiFi every 10 minutes (600000)
-  if(WiFi.status() != WL_CONNECTED && millis()>(wifiInterval+60000)) {
-    Serial.println("Reconnecting to WiFi...");
-    WiFi.disconnect();
-    WiFi.begin(staName.c_str(), staPass.c_str());
-    wifiInterval = millis();
-  }
-
   //Main routines
   if(opMode == 0) {
-    if(detectMove && millis()>(detectMoveMillis+5000) && ((myIMU.readFloatAccelX()-deadzoneX)>detectVal || (myIMU.readFloatAccelY()-deadzoneY)>detectVal || (myIMU.readFloatAccelZ()-deadzoneZ)>detectVal)) {
-      Serial.println("Movement detected on accel");
+    //If not moving, data to SD every 6 minutes (360000) & lora every 30 minutes (loraReductor)
+    if(gpsReady && !routeActive && (millis()>lastLora+360000 || (firstLora && loraStatus == 1))) {
+      Serial.println("sending not move data");
+      if(firstLora && loraStatus == 1) {
+        firstLora = false;
+        loraReductor = 0;
+        delay(200);
+      }
+      sendPos("n");
+      lastLora = millis();
+    }
+
+    //Try to connect to WiFi & LoRa every 10 minutes (600000)
+    if(millis()>(wifiInterval+60000)) {
+      wifiInterval = millis();
+      Serial.println(wifiInterval);
+      if(WiFi.status() != WL_CONNECTED) {
+        Serial.println("Reconnecting to WiFi...");
+        WiFi.disconnect();
+        WiFi.begin(staName.c_str(), staPass.c_str());
+      }
+      if(loraStatus == 2 && enaLora) {
+        lmh_join();
+      }
+    }
+
+    if(WiFi.status() == WL_CONNECTED && enaLora && !routeActive ) {
+      File file = false;
+      if(lastUploaded < currentRideID) {
+        file = SD.open("/"+String(lastUploaded+1)+".data");
+        lastUploaded++;
+        saveSPIFFS();
+      } else if (lastUploadedDrag < currentDragID) {
+        file = SD.open("/d"+String(lastUploadedDrag+1)+".data");
+        lastUploadedDrag++;
+        saveSPIFFS();
+      }
+      if(file){
+        httpsClient.begin(wifiClient, "https://"+webAddress);
+        while(file.available()){
+          httpsClient.setAuthorization("admin", "***REMOVED***");
+          httpsClient.addHeader("Content-Type", "text/plain");
+          String data = file.readStringUntil('\n');
+          httpsClient.addHeader("Content-Length", String(data.length()));
+          Serial.println(httpsClient.POST(data));
+        }
+        file.close();
+        httpsClient.end();
+      } else if (lastUploaded == currentRideID || lastUploadedDrag == currentDragID) {
+        //do nothing
+      } else {
+        Serial.println("Failed to open file to send data");
+      }
+    }
+
+    if(detectMove && ((myIMU.readFloatAccelX()-deadzoneX)>detectVal || (myIMU.readFloatAccelY()-deadzoneY)>detectVal || (myIMU.readFloatAccelZ()-deadzoneZ)>detectVal || (gps.speed.kmph()>5 && gpsReady))) {
+      Serial.println("Movement detected");
       moveDetected = true;
       detectMove = false;
       retryMoveDetect = 0, didntMove = 0;
@@ -498,10 +528,10 @@ void loop()
     }
     if(millis()>(lastLora+60000) && routeActive) {
       if(TinyGPSPlus::distanceBetween(gps.location.lat(),gps.location.lng(),lastLat,lastLng) < 10) {
-        if(didntMove < 3) {
+        if(didntMove < 5) { //5 mites not moving cancels ride
           Serial.println("Didnt move gps");
           didntMove++;
-        } else if (didntMove > 2) {
+        } else if (didntMove > 4) {
           routeActive = false;
           detectMove = true;
         }
@@ -561,9 +591,7 @@ void sendPos(String moving) { //rideid;moving;lat;lng;kmph;epoch
   Serial.println(out);
   fileOper(SD,"/"+String(currentRideID)+".data",out);
   if(enaLora && loraStatus == 1) {
-    if(routeActive) {
-      send_lora_frame(out);
-    } else if (loraReductor == 0) {
+    if (loraReductor == 0) {
       send_lora_frame(out);
       loraReductor = 5;
     } else {
@@ -602,6 +630,10 @@ void modeSwitch(int opm) {
   }
 }
 
+double round2(double value) {
+   return (int)(value * 100 + 0.5) / 100.0;
+}
+
 void processDrag(bool web, char *out, unsigned long startTime, double startLat, double startLng) {
   DynamicJsonDocument doc(2048);
   DeserializationError error = deserializeJson(doc, dragJson);
@@ -609,10 +641,10 @@ void processDrag(bool web, char *out, unsigned long startTime, double startLat, 
     Serial.println("Failed to deserialize json");
   }
 
-  if(web) {
-    doc["ended"] = false;
-  } else {
+  if(dEnded) {
     doc["ended"] = true;
+  } else {
+    doc["ended"] = false;
   }
 
   JsonArray startData = doc.createNestedArray("startData");
@@ -624,7 +656,7 @@ void processDrag(bool web, char *out, unsigned long startTime, double startLat, 
   for (JsonObject t : distanceArray) {
     for(int x = 0; x < numOfDistances; x++) {
       if(targetDistances[x] == t["targ"].as<int>()) {
-        t["time"] = targetDistancesTime[x];
+        t["time"] = round2(targetDistancesTime[x]);
         break;
       }
     }
@@ -633,8 +665,8 @@ void processDrag(bool web, char *out, unsigned long startTime, double startLat, 
   for (JsonObject t : speedArray) {
     for(int x = 0; x < numOfSpeeds; x++) {
       if(targetSpeeds[x] == t["targ"].as<int>()) {
-        t["time"] = targetSpeedsTime[x];
-        t["dist"] = targetSpeedsDist[x];
+        t["time"] = round2(targetSpeedsTime[x]);
+        t["dist"] = round2(targetSpeedsDist[x]);
         break;
       }
     }
@@ -664,7 +696,7 @@ void dragTimer() {
   Serial.println("Drag started");
   dragging = true;
 
-  while(digitalRead(0) == HIGH && targetSpeedsTime[numOfSpeeds-1] == 0 && targetDistancesTime[numOfDistances-1] == 0 && dragging) {
+  while((targetSpeedsTime[numOfSpeeds-1] == 0 || targetDistancesTime[numOfDistances-1] == 0) && dragging) {
 
     while (Serial2.available() > 0) {
       gps.encode(Serial2.read());
@@ -678,13 +710,15 @@ void dragTimer() {
         if(currentSpeed > targetSpeeds[x]) {
           targetSpeedsTime[x] = double(millis()-startTime-gps.location.age())/1000;
           targetSpeedsDist[x] = currentDistance;
+          //Serial.println(double(millis()-startTime-gps.location.age())/1000);
         }
       }
     }
-    for(int x = 0;x<numOfDistances;x++){
-      if(targetDistancesTime[x] == 0) {
-        if(currentDistance > targetDistances[x]) {
-          targetDistancesTime[x] = double(millis()-startTime-gps.location.age())/1000;
+    for(int y = 0;y<numOfDistances;y++){
+      if(targetDistancesTime[y] == 0) {
+        if(currentDistance > targetDistances[y]) {
+          targetDistancesTime[y] = double(millis()-startTime-gps.location.age())/1000;
+          //Serial.println(double(millis()-startTime-gps.location.age())/1000);
         }
       }
     }
@@ -692,14 +726,13 @@ void dragTimer() {
 
   Serial.println("Drag ended");
   dragging = false;
+  dEnded = true;
 
   for(int x = 0;x<numOfSpeeds;x++){
-    Serial.printf("%d kmh/h in %f sec\n", targetSpeeds[x], targetSpeedsTime[x]);
-    targetSpeedsTime[x] = 0;
+    Serial.printf("%d kmh/h in %lf sec\n", targetSpeeds[x], targetSpeedsTime[x]);
   }
   for(int x = 0;x<numOfDistances;x++){
-    Serial.printf("%d m in %f sec\n", targetDistances[x], targetDistancesTime[x]);
-    targetDistancesTime[x] = 0;
+    Serial.printf("%d m in %lf sec\n", targetDistances[x], targetDistancesTime[x]);
   }
 
   processDrag(false, NULL, startTimeGPS, startLat, startLng);
@@ -707,19 +740,19 @@ void dragTimer() {
 
 void LoraSetup() {
   // Define the HW configuration between MCU and SX126x
-  hwConfig.CHIP_TYPE = SX1262_CHIP;		  // Example uses an eByte E22 module with an SX1262
+  hwConfig.CHIP_TYPE = SX1262_CHIP;      // Example uses an eByte E22 module with an SX1262
   hwConfig.PIN_LORA_RESET = 4;    // LORA RESET
-  hwConfig.PIN_LORA_NSS = 5;	    // LORA SPI CS
-  hwConfig.PIN_LORA_SCLK = 18;	  // LORA SPI CLK
-  hwConfig.PIN_LORA_MISO = 19;	  // LORA SPI MISO
+  hwConfig.PIN_LORA_NSS = 5;      // LORA SPI CS
+  hwConfig.PIN_LORA_SCLK = 18;    // LORA SPI CLK
+  hwConfig.PIN_LORA_MISO = 19;    // LORA SPI MISO
   hwConfig.PIN_LORA_DIO_1 = 2;    // LORA DIO_1
-  hwConfig.PIN_LORA_BUSY = 34;	  // LORA SPI BUSY
-  hwConfig.PIN_LORA_MOSI = 23;	  // LORA SPI MOSI
-  hwConfig.RADIO_TXEN = -1;		  // LORA ANTENNA TX ENABLE
-  hwConfig.RADIO_RXEN = -1;		  // LORA ANTENNA RX ENABLE
-  hwConfig.USE_DIO2_ANT_SWITCH = true;	  // Example uses an CircuitRocks Alora RFM1262 which uses DIO2 pins as antenna control
-  hwConfig.USE_DIO3_TCXO = false;			  // Example uses an CircuitRocks Alora RFM1262 which uses DIO3 to control oscillator voltage
-  hwConfig.USE_DIO3_ANT_SWITCH = false;	  // Only Insight ISP4520 module uses DIO3 as antenna control
+  hwConfig.PIN_LORA_BUSY = 34;    // LORA SPI BUSY
+  hwConfig.PIN_LORA_MOSI = 23;    // LORA SPI MOSI
+  hwConfig.RADIO_TXEN = -1;      // LORA ANTENNA TX ENABLE
+  hwConfig.RADIO_RXEN = -1;      // LORA ANTENNA RX ENABLE
+  hwConfig.USE_DIO2_ANT_SWITCH = true;    // Example uses an CircuitRocks Alora RFM1262 which uses DIO2 pins as antenna control
+  hwConfig.USE_DIO3_TCXO = false;        // Example uses an CircuitRocks Alora RFM1262 which uses DIO3 to control oscillator voltage
+  hwConfig.USE_DIO3_ANT_SWITCH = false;    // Only Insight ISP4520 module uses DIO3 as antenna control
   hwConfig.USE_RXEN_ANT_PWR = false;
 
   // Initialize Serial for debug output
@@ -729,7 +762,7 @@ void LoraSetup() {
   uint32_t err_code = lora_hardware_init(hwConfig);
   if (err_code != 0)
   {
-  	Serial.printf("lora_hardware_init failed - %d\n", err_code);
+    Serial.printf("lora_hardware_init failed - %d\n", err_code);
   }
 
   // Setup the EUIs and Keys
@@ -744,7 +777,7 @@ void LoraSetup() {
   err_code = lmh_init(&lora_callbacks, lora_param_init, true, CLASS_A, LORAMAC_REGION_EU868);
   if (err_code != 0)
   {
-  	Serial.printf("lmh_init failed - %d\n", err_code);
+    Serial.printf("lmh_init failed - %d\n", err_code);
   }
 
   // Setup connection to a single channel gateway
@@ -755,7 +788,7 @@ void LoraSetup() {
   /// \todo This is for Dragino LPS8 gateway. How about other gateways???
   if (!lmh_setSubBandChannels(1))
   {
-  	Serial.println("lmh_setSubBandChannels failed. Wrong sub band requested?");
+    Serial.println("lmh_setSubBandChannels failed. Wrong sub band requested?");
   }
 
   // Start Join procedure
@@ -773,9 +806,9 @@ static void lorawan_join_failed_handler(void) {
 //LoRa function for handling HasJoined event.
 static void lorawan_has_joined_handler(void) {
   #if (OVER_THE_AIR_ACTIVATION != 0)
-  	Serial.println("Network Joined");
+    Serial.println("Network Joined");
   #else
-  	Serial.println("OVER_THE_AIR_ACTIVATION != 0");
+    Serial.println("OVER_THE_AIR_ACTIVATION != 0");
 
   #endif
   lmh_class_request(CLASS_A);
@@ -785,8 +818,8 @@ static void lorawan_has_joined_handler(void) {
 
 static void send_lora_frame(String toSend) {
   if (lmh_join_status_get() != LMH_SET) { //Not joined, try again later
-  	Serial.println("Did not join network, skip sending frame");
-  	return;
+    Serial.println("Did not join network, skip sending frame");
+    return;
   }
 
   uint32_t i = 0;
@@ -800,38 +833,38 @@ static void send_lora_frame(String toSend) {
 
 //Function for handling LoRaWan received data from Gateway
 static void lorawan_rx_handler(lmh_app_data_t *app_data) { //app_data - Pointer to rx data
-	Serial.printf("LoRa Packet received on port %d, size:%d, rssi:%d, snr:%d\n", app_data->port, app_data->buffsize, app_data->rssi, app_data->snr);
-	switch (app_data->port) {
-	case 3: // Port 3 switches the class
-		if (app_data->buffsize == 1) {
-			switch (app_data->buffer[0]) {
-  			case 0:
-  				lmh_class_request(CLASS_A);
-  				break;
-  			case 1:
-  				lmh_class_request(CLASS_B);
-  				break;
-  			case 2:
-  				lmh_class_request(CLASS_C);
-  				break;
-  			default:
-  				break;
-			}
+  Serial.printf("LoRa Packet received on port %d, size:%d, rssi:%d, snr:%d\n", app_data->port, app_data->buffsize, app_data->rssi, app_data->snr);
+  switch (app_data->port) {
+  case 3: // Port 3 switches the class
+    if (app_data->buffsize == 1) {
+      switch (app_data->buffer[0]) {
+        case 0:
+          lmh_class_request(CLASS_A);
+          break;
+        case 1:
+          lmh_class_request(CLASS_B);
+          break;
+        case 2:
+          lmh_class_request(CLASS_C);
+          break;
+        default:
+          break;
+      }
     }
-	  break;
-	case LORAWAN_APP_PORT:
-		// YOUR_JOB: Take action on received data
-		break;
-	default:
-		break;
-	}
+    break;
+  case LORAWAN_APP_PORT:
+    // YOUR_JOB: Take action on received data
+    break;
+  default:
+    break;
+  }
 }
 
 static void lorawan_confirm_class_handler(DeviceClass_t Class) {
-	Serial.printf("switch to class %c done\n", "ABC"[Class]);
+  Serial.printf("switch to class %c done\n", "ABC"[Class]);
 
-	// Informs the server that switch has occurred ASAP
-	m_lora_app_data.buffsize = 0;
-	m_lora_app_data.port = LORAWAN_APP_PORT;
-	lmh_send(&m_lora_app_data, LMH_UNCONFIRMED_MSG);
+  // Informs the server that switch has occurred ASAP
+  m_lora_app_data.buffsize = 0;
+  m_lora_app_data.port = LORAWAN_APP_PORT;
+  lmh_send(&m_lora_app_data, LMH_UNCONFIRMED_MSG);
 }

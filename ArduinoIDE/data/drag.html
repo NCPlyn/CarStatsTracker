@@ -1,4 +1,4 @@
-<html>
+<html translate="no">
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=">
@@ -97,8 +97,8 @@
     </header>
     <hr><br>
     <button onclick="doDrag()" class="btn bigbtn">DO-DRAG</button><br>
-    <button onclick="location.href='./forceDragStart'" class="btn">forceStart</button>
-    <button onclick="location.href='./forceDragStop'" class="btn">forceStop</button><br>
+    <button onclick='fAction("start")' class="btn">forceStart</button>
+    <button onclick='fAction("stop")' class="btn">forceStop</button><br>
     <p id="dodragstat">Drag status</p>
     <h2 id="speed" onclick="getSpeed();">0 km/h</h2>
     <hr>
@@ -172,23 +172,28 @@
 </html>
 
 <script>
-//on click of DODRAG, build json, sent it, wait for good return, start timers for data refresh, once json returns ended drag, kill refreshers
-//keep speed running every 2s
+  let delId=0;
+
   function addTableSpeed() {
-    if(Number(document.getElementById("Sfrom").value) < Number(document.getElementById("Sto").value)) {
-      var oRows = document.getElementById("TS").getElementsByTagName('td');
-      document.getElementById("TSbody").innerHTML += "<tr><td>"+document.getElementById("Sfrom").value+"</td><td>"+document.getElementById("Sto").value+"</td><td></td><td></td><td><button onclick=\"document.getElementById('TS').deleteRow("+(oRows.length+1)+");\">X</button></td></tr>";
+    if(Number(document.getElementById("Sfrom").value) < Number(document.getElementById("Sto").value) && document.getElementById("Sfrom").value != "") {
+      document.getElementById("TSbody").innerHTML += "<tr id=\""+delId+"\"><td>"+document.getElementById("Sfrom").value+"</td><td>"+document.getElementById("Sto").value+"</td><td></td><td></td><td><button onclick=\"deleteRow("+delId+");\">X</button></td></tr>";
+      delId++;
     } else {
       alert("Speed 'from' cannot be bigger that speed 'to'");
     }
   }
   function addTableDist() {
-    if(Number(document.getElementById("Dfrom").value) < Number(document.getElementById("Dto").value)) {
-      var oRows = document.getElementById("TD").getElementsByTagName('td');
-      document.getElementById("TDbody").innerHTML += "<tr><td>"+document.getElementById("Dfrom").value+"</td><td>"+document.getElementById("Dto").value+"</td><td></td><td><button onclick=\"document.getElementById('TD').deleteRow("+(oRows.length+1)+");\">X</button></td></tr>";
+    if(Number(document.getElementById("Dfrom").value) < Number(document.getElementById("Dto").value) && document.getElementById("Dfrom").value != "") {
+      document.getElementById("TDbody").innerHTML += "<tr id=\""+delId+"\"><td>"+document.getElementById("Dfrom").value+"</td><td>"+document.getElementById("Dto").value+"</td><td></td><td><button onclick=\"deleteRow("+delId+");\">X</button></td></tr>";
+      delId++;
     } else {
       alert("Distance 'from' cannot be bigger that distance 'to'");
     }
+  }
+
+  function deleteRow(rowid) {
+    var row = document.getElementById(rowid);
+    row.parentNode.removeChild(row);
   }
 
   let dataInt;
@@ -283,16 +288,22 @@
     xmlhttpSpeed.send();
   }
   getSpeed();
-  //setInterval(function () {getSpeed();}, 10000);
+  setInterval(function () {getSpeed();}, 10000);
 
   function fillData(jsontoparse) {
     document.getElementById("TSbody").innerHTML = "";
     document.getElementById("TDbody").innerHTML = "";
     console.log(jsontoparse);
     let obj = JSON.parse(jsontoparse);
-    if(obj.ended == true && dataInt != null) {
-      clearInterval(dataInt);
-      dataInt = null;
+    if(obj.startData[0] > 0) {
+      document.getElementById("dodragstat").innerHTML = "GOGOGO!";
+    }
+    if(obj.ended == true) {
+      if(dataInt != null){
+        clearInterval(dataInt);
+        dataInt = null;
+      }
+      document.getElementById("dodragstat").innerHTML = "Drag done!";
     }
     for(let x = 0; x < obj.speed.length; x++) { //x = current targ
       if(obj.speed[x].hasOwnProperty('from')) {
@@ -310,8 +321,8 @@
               }
             }
           }
-          var oRows = document.getElementById("TS").getElementsByTagName('td');
-          document.getElementById("TSbody").innerHTML += "<tr><td>"+obj.speed[x].from[y]+"</td><td>"+obj.speed[x].targ+"</td><td>"+resultTime+"</td><td>"+resultDistance+"</td><td><button onclick=\"document.getElementById('TS').deleteRow("+(oRows.length+1)+");\">Remove</button></td></tr>";
+          document.getElementById("TSbody").innerHTML += "<tr id=\""+delId+"\"><td>"+obj.speed[x].from[y]+"</td><td>"+obj.speed[x].targ+"</td><td>"+resultTime+"</td><td>"+resultDistance+"</td><td><button onclick=\"deleteRow("+delId+");\">X</button></td></tr>";
+          delId++;
         }
       }
     }
@@ -329,8 +340,8 @@
               }
             }
           }
-          var oRows = document.getElementById("TD").getElementsByTagName('td');
-          document.getElementById("TDbody").innerHTML += "<tr><td>"+obj.dist[x].from[y]+"</td><td>"+obj.dist[x].targ+"</td><td>"+resultTime+"</td><td><button onclick=\"document.getElementById('TD').deleteRow("+(oRows.length+1)+");\">Remove</button></td></tr>";
+          document.getElementById("TDbody").innerHTML += "<tr id=\""+delId+"\"><td>"+obj.dist[x].from[y]+"</td><td>"+obj.dist[x].targ+"</td><td>"+resultTime+"</td><td><button onclick=\"deleteRow("+delId+");\">X</button></td></tr>";
+          delId++;
         }
       }
     }
@@ -377,4 +388,21 @@
   	xmlhttp.send();
   }
   loadFiles();
+
+  function fAction(which) {
+  	xmlhttp=new XMLHttpRequest();
+  	xmlhttp.onreadystatechange=function() {
+  		if (xmlhttp.readyState==4 && xmlhttp.status==200) {
+        if(xmlhttp.responseText != "") {
+          alert(xmlhttp.responseText);
+        }
+  		}
+  	}
+    if(which == "start") {
+      xmlhttp.open("GET", "./forceDragStart", true);
+    } else if (which == "stop") {
+      xmlhttp.open("GET", "./forceDragStop", true);
+    }
+  	xmlhttp.send();
+  }
 </script>

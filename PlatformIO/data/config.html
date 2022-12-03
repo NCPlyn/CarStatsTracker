@@ -1,4 +1,4 @@
-<html>
+<html translate="no">
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=">
@@ -99,10 +99,12 @@
         <hr><h3>Misc. stuff</h3><hr>
         <label for="currentRideID">currentRideID: </label>
         <input type="number" name="currentRideID"><br>
-        <label for="currentDragID">currentDragID: </label>
-        <input type="number" name="currentDragID"><br>
         <label for="lastUploaded">lastUploaded: </label>
         <input type="number" name="lastUploaded"><br>
+        <label for="currentDragID">currentDragID: </label>
+        <input type="number" name="currentDragID"><br>
+        <label for="lastUploadedDrag">lastUploadedDrag: </label>
+        <input type="number" name="lastUploadedDrag"><br>
         <label for="detectVal">detectVal (default:0.4): </label>
         <input type="number" name="detectVal" min="0" max="10"><br><br>
         <hr><h3>WiFi stuff</h3><hr>
@@ -143,6 +145,7 @@
         document.getElementsByName("staName")[0].value = obj.staName;
         document.getElementsByName("staPass")[0].value = obj.staPass;
         document.getElementsByName("lastUploaded")[0].value = obj.lastUploaded;
+        document.getElementsByName("lastUploadedDrag")[0].value = obj.lastUploadedDrag;
         document.getElementsByName("webAddress")[0].value = obj.webAddress;
 			}
 		}
@@ -152,8 +155,9 @@
 	loadConfig();
 
 	function saveConfig() {
-		var params = "enaLora="+document.getElementById("enaLora").checked+"&currentRideID="+document.getElementsByName("currentRideID")[0].value+"&currentDragID="+document.getElementsByName("currentDragID")[0].value+"&detectVal="+document.getElementsByName("detectVal")[0].value+"&apName="+document.getElementsByName("apName")[0].value+"&apPass="+encodeURIComponent(document.getElementsByName("apPass")[0].value)+"&staName="+document.getElementsByName("staName")[0].value+"&staPass="+encodeURIComponent(document.getElementsByName("staPass")[0].value)+"&webAddress="+encodeURIComponent(document.getElementsByName("webAddress")[0].value);
-		var xhr = new XMLHttpRequest();
+		var params = "enaLora="+document.getElementById("enaLora").checked+"&currentRideID="+document.getElementsByName("currentRideID")[0].value+"&currentDragID="+document.getElementsByName("currentDragID")[0].value+"&detectVal="+document.getElementsByName("detectVal")[0].value+"&lastUploaded="+document.getElementsByName("lastUploaded")[0]+"&lastUploadedDrag="+document.getElementsByName("lastUploadedDrag")[0];
+    params += "&apName="+document.getElementsByName("apName")[0].value+"&apPass="+encodeURIComponent(document.getElementsByName("apPass")[0].value)+"&staName="+document.getElementsByName("staName")[0].value+"&staPass="+encodeURIComponent(document.getElementsByName("staPass")[0].value)+"&webAddress="+encodeURIComponent(document.getElementsByName("webAddress")[0].value);
+    var xhr = new XMLHttpRequest();
 		xhr.open("GET", "/saveconfig?"+params, false);
 		xhr.send(null);
 	}

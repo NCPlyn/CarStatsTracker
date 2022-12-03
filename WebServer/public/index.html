@@ -26,6 +26,7 @@
           <th scope="col">Distance</th>
           <th scope="col">
             <a href="/uploader.html" class="btn btn-primary btn-sm" role="button">Uploader</a>
+            <a onclick="loadDrags()" class="btn btn-primary btn-sm" role="button">Load Drags</a>
           </th>
         </tr>
       </thead>
@@ -45,24 +46,69 @@
     });
 
     socket.on('loraDecoded', (moving,lat,lng,speed,epoch) => {
-      placeData(moving,lat,lng,speed,epoch);
+      placeData(moving,lat,lng,speed,epoch,"no");
     });
 
     socket.on('loadPoints', (moving,lat,lng,speed,epoch) => {
       if(moving == "new") {
-        maNum = 0;
-        map.eachLayer((layer) => {
-          if(!layer.hasOwnProperty('_url'))
-            layer.remove();
-        });
+        clearMap();
+      } else {
+        placeData(moving,lat,lng,speed,epoch,"no");
       }
-      placeData(moving,lat,lng,speed,epoch);
     });
 
     socket.on('loadRoutes', (id,startEpoch,max,avg,total) => {
       var d = new Date(0);
       d.setUTCSeconds(startEpoch);
       document.getElementById("tablebody").innerHTML += "<th scope=\"row\">" + id + "</th><td>" + d.toUTCString() + "</td><td>" + max + "</td><td>" + avg + "</td><td>" + total + "</td><td><button id=\""+id+"\" type=\"button\" class=\"btn btn-primary btn-sm rideLoad\">Load</button> <button id=\""+id+"\" type=\"button\" class=\"btn btn-primary btn-sm rideRefresh\">Refresh</button></td></tr>";
+    });
+
+    socket.on('loadDrags', (obj) => {
+      if(obj == "new") {
+        clearMap();
+      } else {
+        let msg = "<br><b>Speed</b><br>";
+        for(let x = 0; x < obj.speed.length; x++) { //x = current targ
+          if(obj.speed[x].hasOwnProperty('from')) {
+            for(let y = 0; y < obj.speed[x].from.length; y++) { //y = current from in targ
+              let resultTime, resultDistance = 0;
+              if(obj.speed[x].from[y] == 0) {
+                resultTime = obj.speed[x].time;
+                resultDistance = obj.speed[x].dist;
+              } else {
+                for(let z = 0; z < obj.speed.length; z++) { //z = current targ
+                  if(obj.speed[z].targ == obj.speed[x].from[y]) {
+                    resultTime = obj.speed[x].time - obj.speed[z].time;
+                    resultDistance = obj.speed[x].dist - obj.speed[z].dist;
+                    break;
+                  }
+                }
+              }
+              msg += "<b>From: </b>"+obj.speed[x].from[y]+"km/h <b>To: </b>"+obj.speed[x].targ+"km/h <b>in: </b>"+resultTime+"s & "+resultDistance+"m<br>";
+            }
+          }
+        }
+        msg += "<br><b>Distance</b><br>"
+        for(let x = 0; x < obj.dist.length; x++) { //x = current targ
+          if(obj.speed[x].hasOwnProperty('from')) {
+            for(let y = 0; y < obj.dist[x].from.length; y++) { //y = current from in targ
+              let resultTime;
+              if(obj.dist[x].from[y] == 0) {
+                resultTime = obj.dist[x].time;
+              } else {
+                for(let z = 0; z < obj.dist.length; z++) { //z = current targ
+                  if(obj.dist[z].targ == obj.dist[x].from[y]) {
+                    resultTime = obj.dist[x].time - obj.dist[z].time;
+                    break;
+                  }
+                }
+              }
+              msg += "<b>From: </b>"+obj.dist[x].from[y]+"m <b>To: </b>"+obj.dist[x].targ+"m <b>in: </b>"+resultTime+"s<br>";
+            }
+          }
+        }
+        placeData("n",obj.startData[1],obj.startData[2],0,obj.startData[0],msg);
+      }
     });
 
     socket.emit('getRoutes');
@@ -91,11 +137,14 @@
     var markerArray = [];
     var maNum = 0;
 
-    function placeData(moving,lat,lng,speed,epoch) {
-      //moving;lat;lng;speed;epoch
+    function placeData(moving,lat,lng,speed,epoch,msg) {
       var d = new Date(0);
       d.setUTCSeconds(epoch);
-      markerArray[maNum] = L.marker([lat, lng]).addTo(map).bindPopup("<b>Speed:</b> " + speed + "km/h<br><b>Time:</b> " + d.toUTCString());
+      if(msg == "no") {
+        markerArray[maNum] = L.marker([lat, lng]).addTo(map).bindPopup("<b>Speed:</b> " + speed + "km/h<br><b>Time:</b> " + d.toUTCString());
+      } else {
+        markerArray[maNum] = L.marker([lat, lng]).addTo(map).bindPopup("<b>At</b> "+d.toUTCString()+"<br>"+msg);
+      }
       maNum++;
       if (maNum > 1 && moving == "y") {
         L.polygon([
@@ -103,6 +152,18 @@
           markerArray[maNum - 1].getLatLng()
         ]).addTo(map);
       }
+    }
+
+    function loadDrags() {
+      socket.emit('getDrags');
+    }
+
+    function clearMap() {
+      maNum = 0;
+      map.eachLayer((layer) => {
+        if(!layer.hasOwnProperty('_url'))
+          layer.remove();
+      });
     }
   </script>
 </html>

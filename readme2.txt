@@ -37,20 +37,18 @@ rideId,moving(y/n),lat,lng,kmph,epochTime
 
 ----------------------------------------------
 
-1. odzkoušet vše zatím (drag,lora,wifi)
-2. bug/stress test
+test all (mainly esp drag upload)
+correct millis
 
 SHOULD DO:
-260???
 GSM - celé na esp
-
-
+dokumentace
 
 NOT GONNA DO:
+260???
 lora - přejít na Helium?
-drag - server(upload+view) & esp(upload)
 
-bacha hesla v config a basicauth
+bacha hesla v config a basicauth a 450
 
 ----------------------------------------------
 WEB:
