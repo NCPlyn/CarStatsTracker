@@ -485,7 +485,7 @@ void loop()
       if(file){
         httpsClient.begin(wifiClient, "https://"+webAddress);
         while(file.available()){
-          httpsClient.setAuthorization("admin", "***REMOVED***");
+          httpsClient.setAuthorization("admin", "admin");
           httpsClient.addHeader("Content-Type", "text/plain");
           String data = file.readStringUntil('\n');
           httpsClient.addHeader("Content-Length", String(data.length()));

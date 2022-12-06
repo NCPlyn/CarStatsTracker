@@ -7,7 +7,7 @@
   "lastUploadedDrag":0,
 	"apName":"CST",
 	"apPass":"1234567890",
-  "staName":" ",
-	"staPass":" ",
-	"webAddress":"example.com/uplink"
+	"staName":"",
+	"staPass":"",
+	"webAddress":"test.ml/uplink"
 }
