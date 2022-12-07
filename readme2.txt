@@ -37,16 +37,12 @@ rideId,moving(y/n),lat,lng,kmph,epochTime
 
 ----------------------------------------------
 
-test all (mainly esp drag upload)
-correct millis
-
-SHOULD DO:
-GSM - celé na esp
 dokumentace
 
 NOT GONNA DO:
 260???
 lora - přejít na Helium?
+GSM - celé na esp
 
 bacha hesla v config a basicauth a 450
 

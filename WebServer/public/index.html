@@ -92,7 +92,7 @@
         }
         msg += "<br><b>Distance</b><br>"
         for(let x = 0; x < obj.dist.length; x++) { //x = current targ
-          if(obj.speed[x].hasOwnProperty('from')) {
+          if(obj.dist[x].hasOwnProperty('from')) {
             for(let y = 0; y < obj.dist[x].from.length; y++) { //y = current from in targ
               let resultTime;
               if(obj.dist[x].from[y] == 0) {

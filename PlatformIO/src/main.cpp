@@ -458,9 +458,8 @@ void loop()
     }
 
     //Try to connect to WiFi & LoRa every 10 minutes (600000)
-    if(millis()>(wifiInterval+60000)) {
+    if(millis()>(wifiInterval+600000)) {
       wifiInterval = millis();
-      Serial.println(wifiInterval);
       if(WiFi.status() != WL_CONNECTED) {
         Serial.println("Reconnecting to WiFi...");
         WiFi.disconnect();
@@ -472,7 +471,7 @@ void loop()
     }
 
     if(WiFi.status() == WL_CONNECTED && enaLora && !routeActive ) {
-      File file = false;
+      File file;
       if(lastUploaded < currentRideID) {
         file = SD.open("/"+String(lastUploaded+1)+".data");
         lastUploaded++;
@@ -507,7 +506,7 @@ void loop()
       retryMoveDetect = 0, didntMove = 0;
       detectMoveMillis = millis();
     }
-    if(millis()>(detectMoveMillis+10000) && moveDetected) { //has to be better
+    if(millis()>(detectMoveMillis+10000) && moveDetected) {
       Serial.println(gps.speed.kmph());
       if(gpsReady && gps.speed.kmph() > 5) {
         Serial.println("We movin");
@@ -528,7 +527,7 @@ void loop()
     }
     if(millis()>(lastLora+60000) && routeActive) {
       if(TinyGPSPlus::distanceBetween(gps.location.lat(),gps.location.lng(),lastLat,lastLng) < 10) {
-        if(didntMove < 5) { //5 mites not moving cancels ride
+        if(didntMove < 5) {
           Serial.println("Didnt move gps");
           didntMove++;
         } else if (didntMove > 4) {

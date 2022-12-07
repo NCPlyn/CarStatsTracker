@@ -2,12 +2,12 @@
 	"currentRideID":0,
 	"currentDragID":0,
 	"enaLora":true,
-	"detectVal":0.6,
+	"detectVal":0.4,
 	"lastUploaded":0,
   "lastUploadedDrag":0,
 	"apName":"CST",
 	"apPass":"1234567890",
-	"staName":"",
-	"staPass":"",
-	"webAddress":"test.ml/uplink"
+	"staName":" ",
+	"staPass":" ",
+	"webAddress":"example.ml/uplink"
 }
