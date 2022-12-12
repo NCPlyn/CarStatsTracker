@@ -20,6 +20,8 @@ const serverhttps = https.createServer(httpsoptions, app);
 const sio = socketio(serverhttps);
 
 let pendingCalc = [];
+let buffArray = [];
+let savingBusy = false;
 
 //----------MQTT----------
 let mqttoptions = {
@@ -93,7 +95,7 @@ function parseData(input) {
     return false;
   let out = {rideId:dataArray[0],moving:dataArray[1],lat:parseFloat(dataArray[2]),lng:parseFloat(dataArray[3]),speed:parseFloat(dataArray[4]),epoch:dataArray[5]};
   io.emit("loraDecoded", out.moving, out.lat, out.lng, out.speed, out.epoch);
-  saveUplink(out);
+  buffArray.push(out);
   return true;
 }
 
@@ -126,7 +128,7 @@ function search(array, insert, cb) {
       right = actual;
     }
     if (cb(array[actual]) == cb(insert)) {
-      return -1;
+      return -2;
     }
   }
   return left;
@@ -136,13 +138,13 @@ function saveUplink(data) {
   let currentFileContent = [];
   if (fs.existsSync("routes/"+String(data.rideId)+".json")) {
     currentFileContent = JSON.parse(fs.readFileSync("routes/"+String(data.rideId)+".json", 'utf8'));
-    let insert = {"moving":data.moving,"lat":data.lat,"lng":data.lng,"speed":data.speed,"epoch":data.epoch};
+    let insert = {"moving":data.moving,"lat":data.lat,"lng":data.lng,"speed":data.speed,"epoch":Number(data.epoch)};
     let index = search(currentFileContent, insert, function (a) { return a.epoch; });
-    if (index != -1) {
+    if (index != -2) {
       currentFileContent.splice(index + 1, 0, insert);
       if(!pendingCalc.includes(Number(data.rideId))) {
         pendingCalc.push(Number(data.rideId));
-        setTimeout(function(){calcStuff(Number(data.rideId));}, 5000);
+        setTimeout(function(){calcStuff(Number(data.rideId));}, 30000);
       }
     }
   } else { //create entry in db
@@ -158,19 +160,22 @@ function saveUplink(data) {
         break;
       }
     }
-    if(!alreadyFound)
+    if(!alreadyFound) {
       dbData.push({"id": data.rideId,"startEpoch": 0,"max": 0,"avg": 0,"total": 0});
-      fs.writeFile("routes.json", JSON.stringify(dbData, null, 2), err => {
-      if (err)
-        console.log(`Data couldn't be saved! Error: ${err}`);
-    });
+      fs.writeFileSync("routes.json", JSON.stringify(dbData, null, 2));
+	}
     currentFileContent.push({"moving":data.moving,"lat":data.lat,"lng":data.lng,"speed":data.speed,"epoch":data.epoch});
   }
-  fs.writeFile("routes/"+String(data.rideId)+".json", String(JSON.stringify(currentFileContent, null, 2)), err => {
-    if (err)
-      console.log(`Data couldn't be saved! Error: ${err}`);
-  });
+  fs.writeFileSync("routes/"+String(data.rideId)+".json", String(JSON.stringify(currentFileContent, null, 2)));
 }
+
+setInterval(function () {
+  if(!savingBusy && buffArray.length > 0) {
+    savingBusy = true;
+    saveUplink(buffArray.shift());
+    savingBusy = false;
+  }
+}, 150);
 
 function calcStuff(rideId){
   let rideData = JSON.parse(fs.readFileSync("routes/"+String(rideId)+".json", 'utf8'));
@@ -195,10 +200,7 @@ function calcStuff(rideId){
       dbData[index].startEpoch = rideData[0].epoch;
     }
   });
-  fs.writeFile("routes.json", JSON.stringify(dbData, null, 2), err => {
-    if (err)
-      console.log(`Data couldn't be saved! Error: ${err}`);
-  });
+  fs.writeFileSync("routes.json", JSON.stringify(dbData, null, 2));
   pendingCalc = pendingCalc.filter(item => item !== rideId);
 }
 
