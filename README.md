@@ -1,5 +1,6 @@
 # CarStatsTracker
-Závěrečná práce
+Závěrečná práce\
+Pro více informací použijte [dokumentaci](Dokumentace.pdf)
 
 ## Cíl projektu
 
